@@ -85,3 +85,6 @@ Ne + O + N → door NEON.
 
 To change a clue or code, edit `puzzles.js`. The comment at the top shows how to hash a new answer.
 If you change a code, also change the clue drawn in `index.html` (the clock, books or tubes).
+
+After editing `config.js` or `puzzles.js`, bump the `?v=` number on their `<script>` tags near the
+bottom of `index.html`, so players' browsers load the new copy instead of a cached one.
