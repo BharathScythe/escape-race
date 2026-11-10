@@ -33,8 +33,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outlin
 .clock { font: 700 22px/1 var(--mono); font-variant-numeric: tabular-nums; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .board { display: flex; gap: 10px; flex: 1 1 420px; min-width: 0; }
 .chip { flex: 1 1 0; min-width: 0; padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
-.chip.A { --c: var(--office); } .chip.B { --c: var(--lab); }
+.chip { --c: var(--office); }
 .chip.mine { border-color: var(--c); }
+.walltabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.walltabs button { padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 13px; }
+.walltabs button[aria-pressed="true"] { color: var(--fg); border-color: var(--team); }
+.trails { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.trails li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 13px; }
+.trails .tn { font-weight: 600; color: var(--c); }
+.trails .tp { color: var(--muted); font-variant-numeric: tabular-nums; }
+.trails .tp.ok { color: var(--good); font-weight: 700; }
+.trails .bar { grid-column: 1 / -1; margin-top: 0; height: 5px; }
+.hintpick { display: grid; gap: 8px; margin-bottom: 14px; }
+.hintpick .btn { display: flex; justify-content: space-between; gap: 10px; text-align: left; border-left: 4px solid var(--c, var(--line)); }
+.hintpick .btn:disabled { opacity: .45; cursor: default; }
+.hintpick small { color: var(--muted); }
 .chip .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; font-size: 13px; }
 .chip .nm { font: 700 15px/1.2 var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip .st { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -103,7 +116,7 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 .teampick .nm { font: 800 28px/1 var(--display); text-transform: uppercase; color: var(--c); }
 .teampick .rm { font-weight: 600; }
 .teampick .who { color: var(--muted); font-size: 13px; min-height: 1.5em; }
-.teampick.A { --c: var(--office); } .teampick.B { --c: var(--lab); }
+.teampick { --c: var(--office); }
 .namefield { display: grid; gap: 6px; max-width: 360px; }
 .namefield label { font-weight: 600; }
 
@@ -129,7 +142,6 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 .hostbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .share { font: 500 14px/1.4 var(--mono); padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; }
 .hostgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.hostgrid .card.A { --team: var(--office); } .hostgrid .card.B { --team: var(--lab); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -146,8 +158,8 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 
   <!-- join -->
   <section class="join" id="join" hidden>
-    <h2>Pick your team</h2>
-    <p>Two teams, two rooms, one race. Everyone on a team shares the same room: when a teammate finds something, it lands in your bag too. The first team out wins.</p>
+    <h2 id="jointitle">Pick your team</h2>
+    <p id="joinintro">Two teams, two rooms, one race. Everyone on a team shares the same room: when a teammate finds something, it lands in your bag too. The first team out wins.</p>
     <div class="namefield">
       <label for="name">Your name</label>
       <input type="text" id="name" maxlength="20" autocomplete="nickname" placeholder="e.g. Priya">
@@ -168,6 +180,7 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
         <div class="wallname" id="wallname"></div>
         <button id="right" aria-label="Turn right">Turn right ›</button>
       </div>
+      <div class="walltabs" id="walltabs" aria-label="Go to wall"></div>
       <div class="bag">
         <p class="label">Team bag</p>
         <div class="items" id="items"></div>
@@ -179,6 +192,7 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
         <h3 id="roomtitle"></h3>
         <p id="roomintro"></p>
         <ul class="people" id="people"></ul>
+        <ul class="trails" id="trails" hidden></ul>
         <button class="hintbtn" id="hint">Get a hint</button>
       </div>
       <div class="card">
@@ -220,18 +234,23 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 </div>
 
 <!-- Bump ?v= after editing config.js or puzzles.js so players' browsers fetch the new copy. -->
-<script src="config.js?v=2"></script>
-<script src="puzzles.js?v=2"></script>
+<script src="config.js?v=3"></script>
+<script src="puzzles.js?v=3"></script>
 <script>
 (function () {
 'use strict';
 const PZ = window.PUZZLES;
-const TEAMS = {
+// GAME_MODE in config.js: 'coop' = everyone in one big building; 'race' = two teams, two rooms.
+const MODE = window.GAME_MODE === 'race' ? 'race' : 'coop';
+const TEAMS = MODE === 'race' ? {
   A: { name: 'Team Office', room: 'office', color: 'var(--office)' },
   B: { name: 'Team Lab', room: 'lab', color: 'var(--lab)' },
+} : {
+  C: { name: 'Everyone', room: 'building', color: 'var(--office)' },
 };
-const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge' };
-const MAX_HINTS = 3;
+const TEAM_KEYS = Object.keys(TEAMS);
+const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker' };
+const maxHints = k => PZ[TEAMS[k].room].maxHints || 3;
 const ROOT = 'escape-race';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -362,25 +381,31 @@ function render() {
   renderPeople(m.team);
   renderScene(m.team);
   renderBag(m.team);
+  renderTrails($('trails'), m.team);
   renderFeed($('feed'), m.team);
-  const used = Object.keys(team(m.team).hints).length;
-  $('hint').textContent = used >= MAX_HINTS ? 'No hints left' : `Get a hint (${MAX_HINTS - used} left)`;
+  const used = Object.keys(team(m.team).hints).length; const max = maxHints(m.team);
+  $('hint').textContent = used >= max ? 'No hints left' : `Get a hint (${max - used} left)`;
   $('hint').disabled = game().phase !== 'playing' || !!team(m.team).escapedAt;
 }
 
 function renderBoard() {
   const m = me(); const g = game();
-  $('board').innerHTML = ['A', 'B'].map(k => {
+  $('board').innerHTML = TEAM_KEYS.map(k => {
     const t = team(k); const room = PZ[TEAMS[k].room]; const p = progress(k); const n = playersOf(k).length;
-    let st = `${p}/${room.steps.length} · ${n} player${n === 1 ? '' : 's'}`, cls = '';
-    if (t.escapedAt) { st = (g.winner === k ? 'WINNER · ' : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
-    return `<div class="chip ${k}${m && m.team === k ? ' mine' : ''}"><div class="row"><span class="nm">${TEAMS[k].name}</span><span class="st ${cls}">${st}</span></div><div class="bar"><i style="width:${(p / room.steps.length) * 100}%"></i></div></div>`;
+    let st = `${p}/${room.steps.length} steps · ${n} player${n === 1 ? '' : 's'}`, cls = '';
+    if (t.escapedAt) { st = (MODE === 'race' ? (g.winner === k ? 'WINNER · ' : 'Escaped · ') : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
+    return `<div class="chip${m && m.team === k ? ' mine' : ''}" style="--c:${TEAMS[k].color}"><div class="row"><span class="nm">${TEAMS[k].name}</span><span class="st ${cls}">${st}</span></div><div class="bar"><i style="width:${(p / room.steps.length) * 100}%"></i></div></div>`;
   }).join('');
   tick();
 }
 
 function renderBanner() {
   const g = game(); const m = me(); const el = $('banner');
+  if (MODE === 'coop') {
+    const k = TEAM_KEYS[0]; const t = team(k);
+    if (t.escapedAt) { el.textContent = `Everyone escaped in ${fmt(t.escapedAt)}!`; el.hidden = false; } else el.hidden = true;
+    return;
+  }
   if (g.winner && TEAMS[g.winner]) {
     const wt = team(g.winner);
     const mine = m && m.team === g.winner;
@@ -388,6 +413,18 @@ function renderBanner() {
       : `${TEAMS[g.winner].name} escaped first in ${fmt(wt.escapedAt)} and wins!` + (m && !team(m.team).escapedAt ? ' You can still finish your room.' : '');
     el.hidden = false;
   } else el.hidden = true;
+}
+
+// Trail progress (co-op building): which trails are done and which notes are found.
+function renderTrails(el, k) {
+  const room = PZ[TEAMS[k].room];
+  if (!room.trails) { el.hidden = true; return; }
+  const f = team(k).flags;
+  el.hidden = false;
+  el.innerHTML = room.trails.map(tr => {
+    const d = tr.steps.filter(s => f[s]).length; const all = d === tr.steps.length;
+    return `<li style="--c:${tr.color}"><span class="tn">${esc(tr.name)}</span><span class="tp${all ? ' ok' : ''}">${all ? room.items[tr.item].name + ' found' : d + '/' + tr.steps.length}</span><span class="bar"><i style="width:${(d / tr.steps.length) * 100}%"></i></span></li>`;
+  }).join('');
 }
 
 function tick() {
@@ -399,9 +436,14 @@ function tick() {
 }
 
 function renderJoin() {
-  $('teampicks').innerHTML = ['A', 'B'].map(k => {
+  if (MODE === 'coop') {
+    $('jointitle').textContent = 'Join the escape';
+    $('joinintro').textContent = 'Everyone is locked in the same building. Split up and explore: whatever anyone finds lands in everyone\'s bag, and the team chat keeps you all talking. Find all four notes to get out.';
+  }
+  $('teampicks').innerHTML = TEAM_KEYS.map(k => {
     const ps = playersOf(k); const room = PZ[TEAMS[k].room];
-    return `<button class="teampick ${k}" data-team="${k}"><span class="nm">${TEAMS[k].name}</span><span class="rm">${esc(room.title)}</span><span class="who">${ps.length ? ps.length + ' joined: ' + ps.map(p => esc(p.name)).join(', ') : 'No one yet'}</span></button>`;
+    const label = MODE === 'coop' ? 'Join the game' : TEAMS[k].name;
+    return `<button class="teampick" style="--c:${TEAMS[k].color}" data-team="${k}"><span class="nm">${label}</span><span class="rm">${esc(room.title)}</span><span class="who">${ps.length ? ps.length + ' joined: ' + ps.map(p => esc(p.name)).join(', ') : 'No one yet'}</span></button>`;
   }).join('');
   if (!$('name').value) $('name').value = store.get('er-name') || '';
 }
@@ -437,15 +479,22 @@ function renderScene(k) {
   const room = TEAMS[k].room; const t = team(k); const g = game();
   const key = [room, wall, Object.keys(t.flags).sort().join(','), g.phase, !!t.escapedAt].join('|');
   const walls = PZ[room].walls;
+  if (wall >= walls.length) wall = 0;
   $('wallname').innerHTML = `${esc(walls[wall])}<small>Wall ${wall + 1} of ${walls.length}</small>`;
-  if (key !== lastScene) { lastScene = key; $('scene').innerHTML = SCENES[room][wall](t.flags); }
+  // wall tabs: jump straight to any wall (handy with 8 walls and 20 people calling out places)
+  const tabs = walls.map((w, i) => `<button data-wall="${i}" aria-pressed="${i === wall}">${esc(w)}</button>`).join('');
+  if ($('walltabs').dataset.k !== room + wall) { $('walltabs').innerHTML = tabs; $('walltabs').dataset.k = room + wall; }
+  if (key !== lastScene) { lastScene = key; $('scene').innerHTML = SCENES[room][wall](t.flags, room); }
   const veil = $('veil');
   if (g.phase !== 'playing' && !t.escapedAt) {
-    veil.innerHTML = `<div><h2>Get ready</h2><p>${esc(PZ[room].intro)}</p><p style="margin-top:10px">Waiting for the host to start the game. ${playersOf(k).length} on your team so far.</p></div>`;
+    const n = playersOf(k).length;
+    veil.innerHTML = `<div><h2>Get ready</h2><p>${esc(PZ[room].intro)}</p><p style="margin-top:10px">Waiting for the host to start the game. ${n} ${MODE === 'coop' ? (n === 1 ? 'player' : 'players') + ' in the building' : 'on your team'} so far.</p></div>`;
     veil.hidden = false;
   } else if (t.escapedAt) {
     const won = g.winner === k;
-    veil.innerHTML = `<div><h2>${won ? 'You won!' : 'You escaped'}</h2><p>Your team got out in <b>${fmt(t.escapedAt)}</b>${won ? ', first of both teams.' : '.'}</p></div>`;
+    veil.innerHTML = MODE === 'coop'
+      ? `<div><h2>You escaped!</h2><p>Everyone got out in <b>${fmt(t.escapedAt)}</b>.</p></div>`
+      : `<div><h2>${won ? 'You won!' : 'You escaped'}</h2><p>Your team got out in <b>${fmt(t.escapedAt)}</b>${won ? ', first of both teams.' : '.'}</p></div>`;
     veil.hidden = false;
   } else veil.hidden = true;
 }
@@ -455,12 +504,14 @@ function renderHost() {
   const g = game();
   $('hstart').textContent = g.phase === 'playing' ? 'Game running' : 'Start game';
   $('hstart').disabled = g.phase === 'playing';
-  $('hostgrid').innerHTML = ['A', 'B'].map(k => {
+  $('hostgrid').innerHTML = TEAM_KEYS.map(k => {
     const room = PZ[TEAMS[k].room]; const t = team(k); const ps = playersOf(k);
-    return `<div class="card ${k}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
+    return `<div class="card" style="--team:${TEAMS[k].color}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
       <ul class="people">${ps.map(p => `<li class="${p.on ? 'on' : ''}">${esc(p.name)}</li>`).join('') || '<li>No players</li>'}</ul>
+      <ul class="trails" data-trails="${k}"></ul>
       <p class="label" style="margin-top:14px">Feed</p><ul class="feed" data-feed="${k}"></ul></div>`;
   }).join('');
+  document.querySelectorAll('[data-trails]').forEach(el => renderTrails(el, el.dataset.trails));
   document.querySelectorAll('[data-feed]').forEach(el => renderFeed(el, el.dataset.feed));
 }
 
@@ -549,16 +600,33 @@ async function act(type, target, item, value) {
   return result;
 }
 
-async function getHint() {
+// In a room with trails, the player first picks which trail they want a hint for.
+function hintPicker() {
+  const m = me(); if (!m) return;
+  const room = PZ[TEAMS[m.team].room];
+  if (!room.trails) return getHint(null);
+  const f = team(m.team).flags;
+  openModal({ title: 'Hint', msg: 'Which trail is your group stuck on? Hints are shared, so everyone sees them in the feed.' });
+  $('mtable').innerHTML = '<div class="hintpick">' + room.trails.map(tr => {
+    const d = tr.steps.filter(s => f[s]).length; const all = d === tr.steps.length;
+    return `<button class="btn ghost" data-trail="${tr.id}" ${all ? 'disabled' : ''} style="--c:${tr.color}"><span>${esc(tr.name)}</span><small>${all ? 'done' : d + '/' + tr.steps.length}</small></button>`;
+  }).join('') + '<button class="btn ghost" data-trail="exit"><span>The exit door</span><small>all 4 notes</small></button></div>';
+}
+$('mtable').addEventListener('click', e => { const b = e.target.closest('[data-trail]'); if (b && !b.disabled) getHint(b.dataset.trail); });
+
+async function getHint(trailId) {
   const m = me(); if (!m) return;
   const k = m.team; const room = PZ[TEAMS[k].room];
+  let steps = room.steps;
+  if (room.trails && trailId === 'exit') steps = ['escaped'];
+  else if (room.trails && trailId) steps = room.trails.find(tr => tr.id === trailId).steps;
   let res = null, fresh = false;
   await B.tx('teams/' + k, cur => {
     const t = cur || {}; t.flags = t.flags || {}; t.hints = t.hints || {}; res = null; fresh = false;
-    const step = room.steps.find(s => !t.flags[s]);
-    if (!step) { res = 'Nothing left to hint.'; return undefined; }
+    const step = steps.find(s => !t.flags[s]);
+    if (!step) { res = 'Nothing left to hint here.'; return undefined; }
     if (t.hints[step]) { res = room.hints[step]; return undefined; }
-    if (Object.keys(t.hints).length >= MAX_HINTS) { res = 'Your team has used all its hints.'; return undefined; }
+    if (Object.keys(t.hints).length >= maxHints(k)) { res = 'Your team has used all its hints.'; return undefined; }
     t.hints[step] = { by: m.name, at: B.now() }; res = room.hints[step]; fresh = true;
     return t;
   });
@@ -566,10 +634,13 @@ async function getHint() {
   openModal({ title: 'Hint', msg: res });
 }
 
-function turn(d) { wall = (wall + d + 4) % 4; store.set('er-wall', wall); selected = null; render(); }
+function wallCount() { const m = me(); return m && TEAMS[m.team] ? PZ[TEAMS[m.team].room].walls.length : 4; }
+function goWall(i) { wall = i; store.set('er-wall', wall); selected = null; render(); }
+function turn(d) { const n = wallCount(); goWall((wall + d + n) % n); }
 $('left').onclick = () => turn(-1);
 $('right').onclick = () => turn(1);
-$('hint').onclick = getHint;
+$('walltabs').addEventListener('click', e => { const b = e.target.closest('[data-wall]'); if (b) goWall(+b.dataset.wall); });
+$('hint').onclick = hintPicker;
 
 $('scene').addEventListener('click', async e => {
   const hot = e.target.closest('[data-t]'); if (!hot) return;
@@ -660,7 +731,7 @@ const BOOKCOL = { R: '#b8392f', B: '#2c5ea8', G: '#3c8c4c', g: '#8e9196', n: '#6
 const SCENES = {
   office: [
     // 0 exit door + clock
-    f => {
+    (f, room) => {
       const [hx, hy] = handPt(190, 140, 22, (7 + 40 / 60) * 30);
       const [mx, my] = handPt(190, 140, 33, 240);
       let ticks = '';
@@ -676,7 +747,10 @@ const SCENES = {
         ${hot('clock', `<circle cx="190" cy="140" r="44" fill="#3a2a1d"/><circle cx="190" cy="140" r="39" fill="#f4efe2"/>${ticks}
           <line x1="190" y1="140" x2="${hx}" y2="${hy}" stroke="#1b1410" stroke-width="5" stroke-linecap="round"/>
           <line x1="190" y1="140" x2="${mx}" y2="${my}" stroke="#1b1410" stroke-width="3" stroke-linecap="round"/><circle cx="190" cy="140" r="4" fill="#b8392f"/>`, 'Wall clock')}
-        <rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><path d="M620 135h70M620 150h70M620 165h40" stroke="#9a8e74" stroke-width="3"/>
+        ${room === 'building' ? hot('certificate', f.safe
+          ? `<rect x="600" y="110" width="110" height="80" fill="#3d434d"/><rect x="612" y="120" width="86" height="60" fill="#22262c"/><circle cx="655" cy="150" r="12" fill="#8a8f98"/><polygon points="600,110 560,124 560,204 600,190" fill="#e9e2cf" stroke="#4a3527" stroke-width="5"/>`
+          : `<rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><text x="655" y="134" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="10" fill="#6d5f49">EMPLOYEE OF</text><text x="655" y="148" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="10" fill="#6d5f49">THE MONTH</text><circle cx="655" cy="170" r="9" fill="#d9a73e"/>`, 'Framed certificate')
+        : `<rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><path d="M620 135h70M620 150h70M620 165h40" stroke="#9a8e74" stroke-width="3"/>`}
         <ellipse cx="405" cy="410" rx="170" ry="26" fill="#8e3b2e" opacity=".85"/>`;
     },
     // 1 desk
@@ -710,10 +784,11 @@ const SCENES = {
           <rect x="442" y="168" width="276" height="10" fill="#5a3b25"/><rect x="442" y="250" width="276" height="10" fill="#5a3b25"/><rect x="442" y="332" width="276" height="10" fill="#5a3b25"/>${books}`, 'Bookshelf')}`;
     },
     // 3 window, plant, cabinet, bin
-    f => officeBase() + `
+    (f, room) => officeBase() + `
       ${hot('window', `<rect x="80" y="70" width="230" height="170" fill="#e7dcc6"/><rect x="92" y="82" width="206" height="146" fill="#9cc6df"/>
         <rect x="110" y="150" width="30" height="78" fill="#6d8aa0"/><rect x="150" y="120" width="38" height="108" fill="#5b7a91"/><rect x="200" y="160" width="26" height="68" fill="#6d8aa0"/><rect x="236" y="135" width="44" height="93" fill="#5b7a91"/>
-        <path d="M195 82v146M92 155h206" stroke="#e7dcc6" stroke-width="8"/>`, 'Window')}
+        <path d="M195 82v146M92 155h206" stroke="#e7dcc6" stroke-width="8"/>
+        ${room === 'building' ? '<rect x="226" y="92" width="40" height="38" fill="#f3e46a" transform="rotate(6 246 111)"/><path d="M232 104h28M232 112h24M232 120h20" stroke="#8c8740" stroke-width="2" transform="rotate(6 246 111)"/>' : ''}`, 'Window')}
       ${hot('plant', `<path d="M180 300q-40-60-10-120M190 300q10-80 50-110M185 300q-60-30-80-80M195 300q50-30 70-70M188 300q0-70-10-140" stroke="#2f6b3a" stroke-width="10" fill="none" stroke-linecap="round"/>
         <ellipse cx="170" cy="180" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="240" cy="192" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="105" cy="222" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="265" cy="232" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="178" cy="160" rx="14" ry="7" fill="#3c8c4c"/>
         <polygon points="140,300 240,300 228,372 152,372" fill="#b5653e"/><rect x="134" y="292" width="112" height="14" fill="#c97448"/>`, 'Plant pot')}
@@ -765,10 +840,10 @@ const SCENES = {
           <text x="590" y="285" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">SAMPLES · 4 °C</text>`, 'Sample fridge')}` + labDark(f);
     },
     // 3 whiteboard, coat, fuse box
-    f => labBase(f) + `
+    (f, room) => labBase(f) + `
       ${hot('whiteboard', `<rect x="60" y="76" width="350" height="200" fill="#f8faf9" stroke="#8d9a9c" stroke-width="6"/><rect x="60" y="276" width="350" height="10" fill="#8d9a9c"/>
         <rect x="140" y="270" width="30" height="8" fill="#2c5ea8"/><rect x="180" y="270" width="30" height="8" fill="#c8352b"/>
-        ${f.board ? '<text x="235" y="180" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="44" fill="#3c9c50" opacity=".8" filter="url(#glow)">Ne + O + N</text><text x="235" y="225" text-anchor="middle" font-family="Figtree, sans-serif" font-size="20" fill="#3c9c50" opacity=".8">= the way out</text>'
+        ${f.board ? `<text x="235" y="180" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="44" fill="#3c9c50" opacity=".8" filter="url(#glow)">Ne + O + N</text><text x="235" y="225" text-anchor="middle" font-family="Figtree, sans-serif" font-size="20" fill="#3c9c50" opacity=".8">= ${room === 'building' ? 'locker code' : 'the way out'}</text>`
           : '<path d="M110 150q60-20 120 5t130-5M120 200q80 15 200-10" stroke="#d6dcdb" stroke-width="16" fill="none" stroke-linecap="round"/>'}`, 'Whiteboard')}
       ${hot('coat', `<rect x="470" y="96" width="70" height="10" fill="#6d7a7c"/><path d="M505 106v12" stroke="#6d7a7c" stroke-width="4"/>
         <path d="M480 128l25-10 25 10 10 150h-70z" fill="#f4f4f0" stroke="#c9ccd3" stroke-width="2"/><path d="M505 118v160" stroke="#c9ccd3" stroke-width="2"/>
@@ -781,12 +856,37 @@ const SCENES = {
   ],
 };
 
+// The co-op building: the office's four walls plus the lab's. The building's exit is in the
+// office, so the lab's first wall holds a storage locker and the eye-wash station instead.
+function labLockerWall(f) {
+  const wheels = f.locker ? 'NEON' : '????';
+  return labBase(f) + `
+    ${hot('locker', `<rect x="330" y="70" width="150" height="290" fill="#5d6873"/>
+      ${f.locker ? '<rect x="340" y="80" width="130" height="270" fill="#1e2328"/><polygon points="340,80 300,96 300,350 340,350" fill="#7c8893"/><rect x="380" y="150" width="50" height="34" fill="#f1ead7"/>'
+        : '<rect x="340" y="80" width="130" height="270" fill="#7c8893"/>' + [0, 1, 2, 3, 4, 5].map(i => `<rect x="360" y="${96 + i * 8}" width="90" height="3" fill="#5d6873"/>`).join('')}
+      <rect x="440" y="196" width="76" height="40" rx="4" fill="#2c2f36"/>
+      ${wheels.split('').map((c, i) => `<rect x="${446 + i * 17}" y="203" width="14" height="26" fill="#e8e6dd"/><text x="${453 + i * 17}" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="14" fill="#222">${c}</text>`).join('')}
+      <text x="405" y="372" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">STORAGE</text>`, 'Storage locker')}
+    ${hot('sink', `<rect x="60" y="250" width="200" height="110" fill="#8b979a"/><rect x="50" y="240" width="220" height="16" fill="#c7d0d2"/><rect x="100" y="244" width="120" height="10" fill="#7d898c"/>
+      <path d="M160 240v-40h30v12" stroke="#a9b3b6" stroke-width="8" fill="none"/><circle cx="190" cy="222" r="3" fill="#7fb6c8"/>`, 'Sink')}
+    ${hot('eyewash', `<rect x="590" y="110" width="110" height="74" rx="4" fill="#1f8a5b"/><text x="645" y="141" text-anchor="middle" fill="#fff" font-family="Figtree, sans-serif" font-weight="700" font-size="13">EYE WASH</text><text x="645" y="161" text-anchor="middle" fill="#fff" font-family="Figtree, sans-serif" font-size="11">STATION</text>
+      <path d="M645 184v${f.magnet ? 0 : 40}" stroke="#ddd" stroke-width="2"/>${f.magnet ? '' : '<rect x="637" y="222" width="16" height="12" fill="#c8352b"/><rect x="637" y="222" width="5" height="12" fill="#ccc"/><rect x="648" y="222" width="5" height="12" fill="#ccc"/>'}`, 'Eye-wash station sign')}` + labDark(f);
+}
+SCENES.building = [SCENES.office[0], SCENES.office[1], SCENES.office[2], SCENES.office[3], labLockerWall, SCENES.lab[1], SCENES.lab[2], SCENES.lab[3]];
+
+Object.assign(ICONS, {
+  labcard: ICONS.memo, safenote: ICONS.memo, printout: ICONS.memo,
+  receipt: '<svg viewBox="0 0 40 40"><path d="M11 5h18v30l-3-2-3 2-3-2-3 2-3-2-3 2z" fill="#f1ead7"/><path d="M14 12h12M14 17h12M14 22h8" stroke="#8a8170" stroke-width="2"/></svg>',
+  magnet: '<svg viewBox="0 0 40 40"><path d="M20 3v12" stroke="#ccc" stroke-width="2"/><path d="M11 15h7v10a2 2 0 0 0 4 0V15h7v10a9 9 0 0 1-18 0z" fill="#c8352b"/><rect x="11" y="15" width="7" height="5" fill="#ccc"/><rect x="22" y="15" width="7" height="5" fill="#ccc"/></svg>',
+  usb: '<svg viewBox="0 0 40 40"><rect x="10" y="14" width="18" height="12" rx="2" fill="#2c5ea8"/><rect x="28" y="16" width="7" height="8" fill="#c9ccd3"/><circle cx="16" cy="20" r="2" fill="#bfe6f2"/></svg>',
+});
+
 // ---------- boot ----------
 async function boot() {
   try {
     B = window.FIREBASE_CONFIG ? await firebaseBackend(window.FIREBASE_CONFIG) : localBackend();
   } catch (err) { showError(err); return; }
-  const w = parseInt(store.get('er-wall'), 10); if (w >= 0 && w < 4) wall = w;
+  const w = parseInt(store.get('er-wall'), 10); if (w >= 0 && w < 8) wall = w;
   B.subscribe(db => { DB = db || {}; render(); });
   setInterval(tick, 1000);
   if (hostKey && !isHost) { $('loading').hidden = false; $('loading').textContent = 'That host key does not match config.js, so you are seeing the player view.'; }

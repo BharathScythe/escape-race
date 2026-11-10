@@ -15,5 +15,9 @@ window.FIREBASE_CONFIG = {
 // Anyone who reads this file can find the key, so it only keeps casual players out.
 window.HOST_KEY = 'host-966ac032';
 
+// 'coop' = everyone together in one big building (4 puzzle trails, one shared chat, up to ~20 players).
+// 'race' = two teams race through two different rooms; the first team out wins.
+window.GAME_MODE = 'coop';
+
 // Game name shown at the top.
 window.GAME_NAME = 'Escape Race';

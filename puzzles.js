@@ -197,5 +197,260 @@
         },
       },
     },
+
+    // ------------------------------------------------------------------
+    // Co-op mode: one big building (the office and the lab joined by a corridor)
+    // for up to ~20 players. Four trails run in parallel; each ends in a note with
+    // one digit of the exit code. Exit code: 7 8 3 4.
+    building: {
+      title: 'The Locked Building',
+      intro: 'The whole building went into lockdown with all of you inside. Split up: four trails each hide one digit of the exit code. Share what you find in the chat.',
+      walls: ['Office · Exit door', 'Office · Desk', 'Office · Bookshelf', 'Office · Window corner',
+              'Lab · Storage locker', 'Lab · Bench', 'Lab · Fridge wall', 'Lab · Whiteboard'],
+      maxHints: 6,
+      trails: [
+        { id: 'desk', name: 'Desk trail', color: '#e3a857', steps: ['key', 'drawer', 'uv', 'pc', 'cabinet'], item: 'memo' },
+        { id: 'lab', name: 'Lab trail', color: '#4cc4b2', steps: ['fuse', 'power', 'scope', 'fridge', 'board', 'locker'], item: 'labcard' },
+        { id: 'coffee', name: 'Coffee trail', color: '#d9826b', steps: ['receipt', 'note', 'safe'], item: 'safenote' },
+        { id: 'log', name: 'Safety-log trail', color: '#9b8cf0', steps: ['magnet', 'usb', 'log'], item: 'printout' },
+      ],
+      steps: ['key', 'drawer', 'uv', 'pc', 'cabinet', 'fuse', 'power', 'scope', 'fridge', 'board', 'locker',
+              'receipt', 'note', 'safe', 'magnet', 'usb', 'log', 'escaped'],
+      hints: {
+        key: 'Plants can hide more than roots. Look in the office window corner.',
+        drawer: 'The brass key\'s tag says DESK. Tap the key in the bag, then tap the desk drawer.',
+        uv: 'Some ink only shows under UV light. Use the flashlight on the painting.',
+        pc: 'The painting gave you a five-letter word. Type it into the office computer.',
+        cabinet: 'Count the books by colour: red, then blue, then green. That is the filing cabinet code.',
+        fuse: 'Check the pockets of the lab coat on the whiteboard wall.',
+        power: 'The lab has no power. Use the fuse on the fuse box.',
+        scope: 'With the lights on, look through the microscope on the lab bench.',
+        fridge: 'Look up each tube\'s atomic number on the poster, in the colour order from the slide.',
+        board: 'The reagent spray reveals erased marker. Try the whiteboard.',
+        locker: 'Ne + O + N spells a word. Try it on the lab storage locker.',
+        receipt: 'Rubbish can be useful. Check the bin in the office window corner.',
+        note: 'Something is stuck to the office window glass.',
+        safe: 'Put the drinks from the window note in order and read their numbers off the receipt. The safe is behind the framed certificate next to the exit.',
+        magnet: 'Look behind the eye-wash station sign next to the lab storage locker.',
+        usb: 'Something small fell down the lab sink. A magnet on a string could fish it out.',
+        log: 'Plug the USB stick into the office computer. It has to be unlocked first (Desk trail).',
+        escaped: 'You need four digits, one from each note in your bag. Each note says where to look.',
+      },
+      items: {
+        brasskey: { name: 'Brass key', desc: 'A small brass key. The paper tag reads "DESK".' },
+        uvlight: { name: 'UV flashlight', desc: 'A pocket flashlight with a purple bulb. Some inks only show under it.' },
+        memo: { name: 'Note 1', desc: 'EXIT CODE, 1st digit = the hour on the stopped wall clock by the exit.' },
+        fuse: { name: 'Fuse', desc: 'A 10-amp glass fuse. It looks unused.' },
+        reagent: { name: 'Reagent spray', desc: 'A spray bottle labelled "Ink developer: reveals erased marker".' },
+        labcard: { name: 'Note 2', desc: 'EXIT CODE, 2nd digit = the atomic number of the GREEN test tube.' },
+        receipt: { name: 'Receipt', desc: 'Café receipt. BAGELS 2 · COFFEE 6 · MUFFIN 1 · TEA 5.' },
+        safenote: { name: 'Note 3', desc: 'EXIT CODE, 3rd digit = how many drawers the filing cabinet has.' },
+        magnet: { name: 'Magnet on a string', desc: 'A strong little magnet tied to a long string.' },
+        usb: { name: 'USB stick', desc: 'A wet USB stick labelled "SAFETY LOG".' },
+        printout: { name: 'Note 4', desc: 'EXIT CODE, 4th digit = the temperature of the sample fridge, in °C.' },
+      },
+      targets: {
+        // ---- desk trail ----
+        plant: {
+          inspect: h => {
+            if (h.done('key')) return already(h, 'key', 'Only soil left in the pot.');
+            h.give('brasskey');
+            h.set('key', 'dug a brass key out of the plant pot. [Desk trail]');
+            return { title: 'Found: Brass key', msg: 'Something glints in the soil: a small brass key. It is now in everyone\'s bag.' };
+          },
+        },
+        drawer: {
+          inspect: h => h.done('drawer') ? already(h, 'drawer', 'The drawer is empty now.') : 'The top drawer is locked. It has a small brass keyhole.',
+          use: {
+            brasskey: h => {
+              h.take('brasskey'); h.give('uvlight');
+              h.set('drawer', 'unlocked the desk drawer and found a UV flashlight. [Desk trail]');
+              return { title: 'Found: UV flashlight', msg: 'The brass key turns. Inside the drawer: a UV flashlight.' };
+            },
+          },
+        },
+        painting: {
+          inspect: h => h.done('uv') ? 'Under UV light the sky spells M A P L E.' : 'An oil painting of a harbour at dusk. The sky looks oddly blotchy.',
+          use: {
+            uvlight: h => {
+              if (h.done('uv')) return already(h, 'uv', 'The sky spells M A P L E.');
+              h.set('uv', 'shone the UV light on the painting. Letters appeared! [Desk trail]');
+              return { title: 'Hidden letters', msg: 'Glowing letters appear across the sky: M A P L E' };
+            },
+          },
+        },
+        computer: {
+          inspect: h => h.done('pc')
+            ? { title: `Unlocked by ${h.by('pc')}`, msg: 'A note on the desktop: "Filing cabinet = how many RED books, then BLUE books, then GREEN books are on the shelf." There is a free USB port on the side.' }
+            : { msg: 'The computer is locked. It asks for a password.', prompt: true },
+          code: {
+            kind: 'letters', len: 5,
+            hashes: ['ae9e7da0a075fc1657b384e668b905a976dca311c6e7262a329f2a609dd59fae'],
+            open: h => !h.done('pc'),
+            solve: h => {
+              h.set('pc', 'logged into the office computer. [Desk trail]');
+              return { title: 'Logged in', msg: 'A note on the desktop: "Filing cabinet = how many RED books, then BLUE books, then GREEN books are on the shelf."' };
+            },
+          },
+          use: {
+            usb: h => {
+              if (!h.done('pc')) return 'The computer is locked, so it won\'t read the USB stick. Someone needs to log in first (Desk trail).';
+              h.take('usb'); h.give('printout');
+              h.set('log', 'read the safety log from the USB stick. Note 4 is in the bag! [Safety-log trail]');
+              return { title: 'Found: Note 4', msg: 'The safety log opens. Its last line: "EXIT CODE, 4th digit = the temperature of the sample fridge, in °C." You print it out.' };
+            },
+          },
+        },
+        shelf: { inspect: () => 'Rows of hardcovers. Someone tried to sort them by colour and gave up.' },
+        cabinet: {
+          inspect: h => h.done('cabinet')
+            ? already(h, 'cabinet', 'Note 1 is in the bag.')
+            : { msg: 'A filing cabinet with three drawers and a 3-digit combination lock.', prompt: true },
+          code: {
+            kind: 'digits', len: 3,
+            hashes: ['06aa2db06aa32a1b6d7d49298cd7d6053d53dadf9d4845601a853bce1c0080ed'],
+            open: h => !h.done('cabinet'),
+            solve: h => {
+              h.give('memo');
+              h.set('cabinet', 'opened the filing cabinet. Note 1 is in the bag! [Desk trail]');
+              return { title: 'Found: Note 1', msg: 'Inside: "EXIT CODE, 1st digit = the hour on the stopped wall clock by the exit."' };
+            },
+          },
+        },
+        clock: { inspect: () => 'The wall clock has stopped. The second hand does not move.' },
+
+        // ---- coffee trail ----
+        bin: {
+          inspect: h => {
+            if (h.done('receipt')) return already(h, 'receipt', 'Just a broken pencil left.');
+            h.give('receipt');
+            h.set('receipt', 'found a café receipt in the bin. [Coffee trail]');
+            return { title: 'Found: Receipt', msg: 'A crumpled café receipt: BAGELS 2 · COFFEE 6 · MUFFIN 1 · TEA 5.' };
+          },
+        },
+        window: {
+          inspect: h => {
+            h.set('note', 'read the sticky note on the window. [Coffee trail]');
+            return { title: 'Sticky note', msg: 'Stuck to the glass: "Safe = my usual order: TEA, COFFEE, BAGELS, MUFFIN".' };
+          },
+        },
+        certificate: {
+          inspect: h => h.done('safe')
+            ? already(h, 'safe', 'Note 3 is in the bag.')
+            : { msg: '"Employee of the Month". The frame swings out on a hinge. Behind it: a small wall safe with a 4-digit lock.', prompt: true },
+          code: {
+            kind: 'digits', len: 4,
+            hashes: ['51d0aa5b97d6061928da965abeb4d3d8698f94157c16c4802e31ed1f4bccb23c'],
+            open: h => !h.done('safe'),
+            solve: h => {
+              h.give('safenote');
+              h.set('safe', 'cracked the wall safe. Note 3 is in the bag! [Coffee trail]');
+              return { title: 'Found: Note 3', msg: 'Inside the safe: "EXIT CODE, 3rd digit = how many drawers the filing cabinet has."' };
+            },
+          },
+        },
+
+        // ---- lab trail ----
+        coat: {
+          inspect: h => {
+            if (h.done('fuse')) return already(h, 'fuse', 'The pockets are empty.');
+            h.give('fuse');
+            h.set('fuse', 'found a fuse in a lab coat pocket. [Lab trail]');
+            return { title: 'Found: Fuse', msg: 'In the coat pocket: a small glass fuse.' };
+          },
+        },
+        fusebox: {
+          inspect: h => h.done('power') ? `Fixed by ${h.by('power')}. All switches up.` : 'The fuse box has one empty slot. Only the emergency light works.',
+          use: {
+            fuse: h => {
+              h.take('fuse');
+              h.set('power', 'fixed the fuse box. The lab lights are on! [Lab trail]');
+              return { title: 'Power restored', msg: 'The fuse clicks in. The lab lights flicker on.' };
+            },
+          },
+        },
+        microscope: {
+          inspect: h => {
+            if (!h.done('power')) return 'The microscope lamp is dead. No power.';
+            h.set('scope', 'read the slide under the microscope. [Lab trail]');
+            return { title: 'Under the microscope', msg: 'Tiny handwriting on the slide: "Fridge code = the atomic numbers of the tubes, in the order RED, YELLOW, GREEN, BLUE."' };
+          },
+        },
+        tubes: { inspect: h => h.done('power') ? 'Four test tubes, each labelled with an element symbol.' : 'Too dark to read the labels.' },
+        poster: { inspect: () => ({ title: 'Periodic table', table: true, msg: 'The first ten elements, with their atomic numbers.' }) },
+        fridge: {
+          inspect: h => h.done('fridge')
+            ? already(h, 'fridge', 'The reagent spray is in the bag. The display reads 4 °C.')
+            : { msg: 'A sample fridge with a 4-digit lock. The display reads 4 °C.', prompt: true },
+          code: {
+            kind: 'digits', len: 4,
+            hashes: ['b8ed4483ac93889e5af4b0b1c057c8aee3f9b494a4cae9ea52f91a7f5a30b89c'],
+            open: h => !h.done('fridge'),
+            solve: h => {
+              h.give('reagent');
+              h.set('fridge', 'opened the sample fridge and found a reagent spray. [Lab trail]');
+              return { title: 'Found: Reagent spray', msg: 'Inside, next to old samples: a spray bottle labelled "Ink developer".' };
+            },
+          },
+        },
+        whiteboard: {
+          inspect: h => h.done('board') ? 'The developed writing reads: Ne + O + N = locker code.' : 'Wiped clean, but faint smudges remain where someone wrote something.',
+          use: {
+            reagent: h => {
+              if (h.done('board')) return already(h, 'board', 'It reads: Ne + O + N = locker code.');
+              h.set('board', 'sprayed the whiteboard. Hidden writing appeared! [Lab trail]');
+              return { title: 'Hidden writing', msg: 'Ghostly marker appears: "Ne + O + N = locker code".' };
+            },
+          },
+        },
+        locker: {
+          inspect: h => h.done('locker')
+            ? already(h, 'locker', 'Note 2 is in the bag.')
+            : { msg: 'A tall storage locker with a 4-letter combination lock.', prompt: true },
+          code: {
+            kind: 'letters', len: 4,
+            hashes: ['770bddee273119ddf2856ba7ff05417f1f4f24aa9dfd357c2ad1e58fcb1ebabc'],
+            open: h => !h.done('locker'),
+            solve: h => {
+              h.give('labcard');
+              h.set('locker', 'opened the storage locker. Note 2 is in the bag! [Lab trail]');
+              return { title: 'Found: Note 2', msg: 'Taped inside the locker door: "EXIT CODE, 2nd digit = the atomic number of the GREEN test tube."' };
+            },
+          },
+        },
+
+        // ---- safety-log trail ----
+        eyewash: {
+          inspect: h => {
+            if (h.done('magnet')) return already(h, 'magnet', 'Nothing else behind the sign.');
+            h.give('magnet');
+            h.set('magnet', 'found a magnet on a string behind the eye-wash sign. [Safety-log trail]');
+            return { title: 'Found: Magnet on a string', msg: 'Behind the eye-wash sign hangs a strong magnet tied to a long string.' };
+          },
+        },
+        sink: {
+          inspect: h => h.done('usb') ? already(h, 'usb', 'The drain is clear now.') : 'A deep steel sink. Something small and metal glints far down the drain, out of reach.',
+          use: {
+            magnet: h => {
+              if (h.done('usb')) return already(h, 'usb', 'The drain is clear now.');
+              h.give('usb');
+              h.set('usb', 'fished a USB stick out of the sink drain. [Safety-log trail]');
+              return { title: 'Found: USB stick', msg: 'The magnet clicks onto something. You pull up a wet USB stick labelled "SAFETY LOG".' };
+            },
+          },
+        },
+
+        // ---- the exit ----
+        door: {
+          inspect: () => ({ msg: 'The building\'s exit door has a 4-digit keypad. One digit comes from each of the four notes.', prompt: true }),
+          code: {
+            kind: 'digits', len: 4,
+            hashes: ['160bc901a53d36e5086f3570b65344ab120a56122bf346e12dc8fbb164bd75fb'],
+            open: () => true,
+            solve: h => { h.escape(); return { title: 'You escaped!', msg: 'The keypad beeps green and the doors open. Everyone is out!' }; },
+          },
+        },
+      },
+    },
   };
 })();

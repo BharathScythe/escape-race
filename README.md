@@ -1,13 +1,20 @@
 # Escape Race
 
-A two-team escape room race for 10–15 players, hosted free on GitHub Pages.
+A multiplayer escape room, hosted free on GitHub Pages. It has two modes, set by `GAME_MODE` in `config.js`.
 
+**Co-op (`'coop'`, the default): everyone together, up to about 20 players**
+- Everyone is locked in *The Locked Building*: the office and the lab joined together, 8 walls.
+- Four puzzle trails run side by side, so small groups can split up: Desk, Lab, Coffee and Safety log.
+  Each trail ends in a note with one digit of the 4-digit exit code. The Safety-log trail needs the
+  office computer, which the Desk trail unlocks.
+- One shared bag, one chat for everyone, and six hints, which players ask for per trail.
+
+**Race (`'race'`): two teams, two rooms, first team out wins**
 - **Team Office** is locked in *The Manager's Office*; **Team Lab** is locked in *The Secret Lab*.
-- Everyone on a team shares one room live. When a teammate finds something, it appears in the whole
-  team's bag, and anyone who clicks the same spot sees "Already found by Priya".
-- Wrong codes, finds and hints show up in the team feed, with a team chat beside it.
-- Three hints per team.
-- **The first team to escape wins.** The scoreboard at the top shows both teams' progress live.
+- Three hints per team. The scoreboard at the top shows both teams' progress live.
+
+In both modes, everything a player finds appears in everyone's bag on their team, and anyone who
+clicks the same spot sees "Already found by Priya". Finds, wrong codes and hints show up in the feed.
 
 Files: `index.html` (the game), `puzzles.js` (room logic, clues and hints), `config.js` (your settings).
 `serve.js` is only for testing on your own computer.
@@ -69,6 +76,20 @@ node serve.js
 Open http://localhost:8080/?host=change-me in one tab and http://localhost:8080 in another.
 
 ## Spoilers: the solutions
+
+<details><summary>Co-op: The Locked Building (exit code 7834)</summary>
+
+- **Desk trail:** plant pot → brass key → desk drawer → UV flashlight → painting shows MAPLE → computer
+  MAPLE → books 3 red, 7 blue, 2 green → filing cabinet 372 → Note 1: the hour on the stopped clock = **7**.
+- **Lab trail:** lab coat → fuse → fuse box → microscope → tubes red H=1, yellow N=7, green O=8, blue C=6 →
+  fridge 1786 → reagent spray → whiteboard Ne + O + N → storage locker NEON → Note 2: the green tube is
+  oxygen = **8**.
+- **Coffee trail:** bin → receipt (BAGELS 2, COFFEE 6, MUFFIN 1, TEA 5) + window sticky note (TEA, COFFEE,
+  BAGELS, MUFFIN) → safe behind the certificate 5621 → Note 3: the filing cabinet has **3** drawers.
+- **Safety-log trail:** eye-wash sign → magnet → sink → USB stick → office computer (after MAPLE) →
+  Note 4: the fridge is at **4** °C.
+- **Exit door:** 7834.
+</details>
 
 <details><summary>Team Office</summary>
 
