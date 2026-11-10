@@ -1,20 +1,19 @@
-// 1. Paste your Firebase web app config here (see README.md, "Set up Firebase").
-//    Leave it as null to play in demo mode: everything stays in this one browser,
-//    which is handy for testing with two tabs side by side.
-window.FIREBASE_CONFIG = null;
-/* Example:
+// Firebase web app config for the escape-race-399e0 project.
+// This config is meant to be public; the database rules decide what it can do.
+// Set it to null to play in demo mode (one browser only, handy for testing).
 window.FIREBASE_CONFIG = {
-  apiKey: "AIza...",
-  authDomain: "my-escape.firebaseapp.com",
-  databaseURL: "https://my-escape-default-rtdb.firebaseio.com",
-  projectId: "my-escape",
-  appId: "1:123:web:abc"
+  apiKey: "AIzaSyAc3m7PL5vtQkFNAAsxC5NgPtmco5vv7wY",
+  authDomain: "escape-race-399e0.firebaseapp.com",
+  databaseURL: "https://escape-race-399e0-default-rtdb.firebaseio.com",
+  projectId: "escape-race-399e0",
+  storageBucket: "escape-race-399e0.firebasestorage.app",
+  messagingSenderId: "690795692509",
+  appId: "1:690795692509:web:dfea9f2f42d69fb615f634"
 };
-*/
 
-// 2. The host opens  https://<you>.github.io/<repo>/?host=<HOST_KEY>  to start and reset games.
-//    Anyone who reads this file can find the key, so it only keeps casual players out.
-window.HOST_KEY = 'change-me';
+// The host opens  https://bharathscythe.github.io/escape-race/?host=<HOST_KEY>  to start and reset games.
+// Anyone who reads this file can find the key, so it only keeps casual players out.
+window.HOST_KEY = 'host-966ac032';
 
-// 3. Game name shown at the top.
+// Game name shown at the top.
 window.GAME_NAME = 'Escape Race';
