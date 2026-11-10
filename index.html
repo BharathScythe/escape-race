@@ -49,7 +49,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outlin
 .scores th { text-align: left; font: 700 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .scores td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
 .scores td:nth-child(n+3), .scores th:nth-child(n+3) { text-align: right; }
-.scores tr.top td { color: var(--good); }
+.scores tr.lead td { color: var(--good); }
 .scores .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--good); color: var(--good); margin-left: 4px; }
 .hintpick { display: grid; gap: 8px; margin-bottom: 14px; }
 .hintpick .btn { display: flex; justify-content: space-between; gap: 10px; text-align: left; border-left: 4px solid var(--c, var(--line)); }
@@ -450,7 +450,7 @@ function scores(k) {
 function renderScores(el, k) {
   const list = scores(k);
   el.innerHTML = list.length ? `<table class="scores"><thead><tr><th>#</th><th>Player</th><th>Points</th><th>Steps</th><th>Notes</th><th>Hints</th></tr></thead><tbody>` +
-    list.map((r, i) => `<tr class="${i === 0 && r.points > 0 ? 'top' : ''}"><td>${i + 1}</td><td>${esc(r.name)}${r.escaped ? ' <span class="tag">opened exit</span>' : ''}</td><td><b>${r.points}</b></td><td>${r.finds}</td><td>${r.notes}</td><td>${r.hints}</td></tr>`).join('') +
+    list.map((r, i) => `<tr class="${i === 0 && r.points > 0 ? 'lead' : ''}"><td>${i + 1}</td><td>${esc(r.name)}${r.escaped ? ' <span class="tag">opened exit</span>' : ''}</td><td><b>${r.points}</b></td><td>${r.finds}</td><td>${r.notes}</td><td>${r.hints}</td></tr>`).join('') +
     '</tbody></table>' : '<p class="empty">No players yet.</p>';
 }
 
