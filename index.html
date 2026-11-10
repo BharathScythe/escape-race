@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escape Race</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a game shell. Header scoreboard on top; the room (one wall at a time) on the left,
+   the team panel (players, hints, feed, chat) on the right; stacks on phones. */
+:root {
+  --bg: #121419; --panel: #1b1e26; --panel-2: #232733; --line: #2f3442;
+  --fg: #ecebe6; --muted: #9ba0ad;
+  --office: #e3a857; --lab: #4cc4b2;
+  --good: #73d38a; --bad: #f07470; --uv: #c48bff;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+body { padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.brand { font: 800 30px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; margin: 0; }
+.clock { font: 700 22px/1 var(--mono); font-variant-numeric: tabular-nums; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.board { display: flex; gap: 10px; flex: 1 1 420px; min-width: 0; }
+.chip { flex: 1 1 0; min-width: 0; padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+.chip.A { --c: var(--office); } .chip.B { --c: var(--lab); }
+.chip.mine { border-color: var(--c); }
+.chip .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; font-size: 13px; }
+.chip .nm { font: 700 15px/1.2 var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .st { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip .st.win { color: var(--good); font-weight: 700; }
+.bar { height: 6px; border-radius: 3px; background: var(--panel-2); margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--c); width: 0; transition: width .5s ease; }
+.banner { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: color-mix(in srgb, var(--good) 16%, var(--panel)); border: 1px solid var(--good); font-weight: 600; }
+.demo { margin-top: 12px; padding: 8px 12px; border-radius: 8px; border: 1px dashed var(--muted); color: var(--muted); font-size: 13px; }
+
+/* game layout */
+.game { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; margin-top: 18px; align-items: start; }
+@media (max-width: 920px) { .game { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #000; }
+.stage svg { display: block; width: 100%; height: auto; }
+.hot { cursor: pointer; transition: filter .15s; }
+.hot:hover, .hot:focus { filter: brightness(1.18) drop-shadow(0 0 6px rgba(255,255,255,.35)); outline: none; }
+.using .hot { cursor: crosshair; }
+.veil { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: rgba(10,12,16,.82); }
+.veil h2 { font: 800 clamp(26px, 5vw, 44px)/1 var(--display); text-transform: uppercase; margin: 0 0 8px; }
+.veil p { margin: 0 auto; max-width: 46ch; color: var(--muted); }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.nav button { padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); font-weight: 600; }
+.nav button:hover { background: var(--panel-2); }
+.wallname { font: 700 18px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; text-align: center; }
+.wallname small { display: block; font: 500 12px/1.4 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+.bag { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+.label { font: 700 12px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.items { display: flex; flex-wrap: wrap; gap: 8px; }
+.item { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.item svg { width: 34px; height: 34px; flex: none; }
+.item[aria-pressed="true"] { border-color: var(--team); box-shadow: 0 0 0 1px var(--team) inset; }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+.itemnote { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.itemnote b { color: var(--fg); }
+
+.side { display: grid; gap: 14px; }
+.card { padding: 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.card h3 { font: 800 22px/1.1 var(--display); text-transform: uppercase; margin: 0 0 6px; color: var(--team); }
+.card p { margin: 0; color: var(--muted); font-size: 14px; }
+.people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding: 0; list-style: none; }
+.people li { font-size: 13px; padding: 3px 9px; border-radius: 99px; background: var(--panel-2); display: flex; align-items: center; gap: 6px; }
+.people li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.people li.on::before { background: var(--good); }
+.people li.me { outline: 1px solid var(--team); }
+.hintbtn { width: 100%; margin-top: 12px; padding: 9px; border-radius: 8px; border: 1px solid var(--team); background: transparent; color: var(--team); font-weight: 700; }
+.hintbtn:disabled { opacity: .45; cursor: default; }
+.feed { list-style: none; margin: 0; padding: 0; max-height: 330px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.feed li { padding: 6px 9px; border-radius: 6px; background: var(--panel-2); overflow-wrap: anywhere; }
+.feed li.ev { background: transparent; border-left: 2px solid var(--team); border-radius: 0; color: var(--muted); }
+.feed li.ev b { color: var(--fg); }
+.feed time { float: right; margin-left: 8px; font: 500 11px/1.8 var(--mono); color: var(--muted); }
+.chat { display: flex; gap: 8px; margin-top: 10px; }
+input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+.btn { padding: 9px 14px; border-radius: 8px; border: 0; background: var(--team, var(--fg)); color: #111; font-weight: 700; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+.btn.danger { background: var(--bad); }
+
+/* join */
+.join { max-width: 760px; margin: 40px auto 0; }
+.join h2 { font: 800 clamp(34px, 7vw, 60px)/.95 var(--display); text-transform: uppercase; margin: 0 0 10px; }
+.join > p { color: var(--muted); margin: 0 0 22px; max-width: 60ch; }
+.teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 16px; }
+.teampick { text-align: left; padding: 18px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--c); display: grid; gap: 6px; }
+.teampick:hover { background: var(--panel-2); }
+.teampick .nm { font: 800 28px/1 var(--display); text-transform: uppercase; color: var(--c); }
+.teampick .rm { font-weight: 600; }
+.teampick .who { color: var(--muted); font-size: 13px; min-height: 1.5em; }
+.teampick.A { --c: var(--office); } .teampick.B { --c: var(--lab); }
+.namefield { display: grid; gap: 6px; max-width: 360px; }
+.namefield label { font-weight: 600; }
+
+/* modal */
+.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(5,6,9,.7); }
+.box { width: min(460px, 100%); max-height: 90vh; overflow-y: auto; padding: 20px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.box h4 { font: 800 26px/1.05 var(--display); text-transform: uppercase; margin: 0 0 8px; color: var(--team, var(--fg)); }
+.box p { margin: 0 0 14px; }
+.codeform { display: grid; gap: 10px; }
+.codeform input { font: 700 28px/1 var(--mono); letter-spacing: .35em; text-align: center; text-transform: uppercase; padding: 12px; }
+.codeform.shake { animation: shake .35s; }
+.codeform .err { color: var(--bad); font-size: 14px; min-height: 1.4em; margin: 0; }
+@keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.ptable { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
+.ptable div { padding: 6px; border-radius: 6px; background: var(--panel-2); text-align: center; line-height: 1.15; }
+.ptable b { display: block; font: 700 20px/1.2 var(--mono); }
+.ptable span { font-size: 11px; color: var(--muted); }
+.ptable em { font: 700 13px/1 var(--mono); font-style: normal; color: var(--lab); }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* host */
+.host { margin-top: 18px; display: grid; gap: 16px; }
+.hostbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.share { font: 500 14px/1.4 var(--mono); padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.hostgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.hostgrid .card.A { --team: var(--office); } .hostgrid .card.B { --team: var(--lab); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand" id="brand">Escape Race</h1>
+    <div class="clock" id="clock" aria-label="Time">00:00</div>
+    <div class="board" id="board"></div>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+  <div class="demo" id="demo" hidden>Demo mode: the game is only shared between tabs in this browser. Add your Firebase config to <code>config.js</code> so everyone can play together.</div>
+  <div class="demo" id="loading">Connecting…</div>
+
+  <!-- join -->
+  <section class="join" id="join" hidden>
+    <h2>Pick your team</h2>
+    <p>Two teams, two rooms, one race. Everyone on a team shares the same room: when a teammate finds something, it lands in your bag too. The first team out wins.</p>
+    <div class="namefield">
+      <label for="name">Your name</label>
+      <input type="text" id="name" maxlength="20" autocomplete="nickname" placeholder="e.g. Priya">
+    </div>
+    <div class="teams" id="teampicks"></div>
+    <p class="itemnote" id="joinerr"></p>
+  </section>
+
+  <!-- game -->
+  <section class="game" id="game" hidden>
+    <div>
+      <div class="stage" id="stage">
+        <svg id="scene" viewBox="0 0 800 450" role="img" aria-label="The room"></svg>
+        <div class="veil" id="veil" hidden></div>
+      </div>
+      <div class="nav">
+        <button id="left" aria-label="Turn left">‹ Turn left</button>
+        <div class="wallname" id="wallname"></div>
+        <button id="right" aria-label="Turn right">Turn right ›</button>
+      </div>
+      <div class="bag">
+        <p class="label">Team bag</p>
+        <div class="items" id="items"></div>
+        <p class="itemnote" id="itemnote"></p>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <h3 id="roomtitle"></h3>
+        <p id="roomintro"></p>
+        <ul class="people" id="people"></ul>
+        <button class="hintbtn" id="hint">Get a hint</button>
+      </div>
+      <div class="card">
+        <p class="label">Team feed</p>
+        <ul class="feed" id="feed"></ul>
+        <form class="chat" id="chat">
+          <input type="text" id="chatmsg" maxlength="200" placeholder="Message your team" aria-label="Message your team">
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
+    </aside>
+  </section>
+
+  <!-- host -->
+  <section class="host" id="host" hidden>
+    <div class="hostbar">
+      <button class="btn" id="hstart" style="--team: var(--good)">Start game</button>
+      <button class="btn ghost" id="hreset">Reset rooms</button>
+      <button class="btn ghost" id="hclear">Reset rooms and remove players</button>
+      <span id="hconfirm"></span>
+    </div>
+    <div class="share">Players join at: <span id="sharelink"></span></div>
+    <div class="hostgrid" id="hostgrid"></div>
+  </section>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+    <h4 id="mtitle"></h4>
+    <p id="mmsg"></p>
+    <div id="mtable"></div>
+    <form class="codeform" id="mcode" hidden>
+      <input type="text" id="mcodein" autocomplete="off" spellcheck="false" aria-label="Code">
+      <p class="err" id="mcodeerr"></p>
+      <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn" type="submit">Try code</button></div>
+    </form>
+    <div class="actions" id="mok"><button type="button" class="btn" data-close>OK</button></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="puzzles.js"></script>
+<script>
+(function () {
+'use strict';
+const PZ = window.PUZZLES;
+const TEAMS = {
+  A: { name: 'Team Office', room: 'office', color: 'var(--office)' },
+  B: { name: 'Team Lab', room: 'lab', color: 'var(--lab)' },
+};
+const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge' };
+const MAX_HINTS = 3;
+const ROOT = 'escape-race';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+if (window.GAME_NAME) { $('brand').textContent = window.GAME_NAME; document.title = window.GAME_NAME; }
+
+// ---------- SHA-256 (plain JS, works on http and https) ----------
+function sha256(ascii) {
+  function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
+  const mp = Math.pow, maxWord = mp(2, 32); let result = '', i, j;
+  const words = [], bitLen = ascii.length * 8; let hash = [], k = [], pc = 0; const comp = {};
+  for (let c = 2; pc < 64; c++) { if (!comp[c]) { for (i = 0; i < 313; i += c) comp[i] = c; hash[pc] = (mp(c, .5) * maxWord) | 0; k[pc++] = (mp(c, 1 / 3) * maxWord) | 0; } }
+  ascii += '\x80'; while (ascii.length % 64 - 56) ascii += '\x00';
+  for (i = 0; i < ascii.length; i++) { j = ascii.charCodeAt(i); words[i >> 2] |= j << ((3 - i) % 4) * 8; }
+  words[words.length] = (bitLen / maxWord) | 0; words[words.length] = bitLen;
+  for (j = 0; j < words.length;) {
+    const w = words.slice(j, j += 16), old = hash; hash = hash.slice(0, 8);
+    for (i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2], a = hash[0], e = hash[4];
+      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + k[i] +
+        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);
+      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(t1 + t2) | 0].concat(hash); hash[4] = (hash[4] + t1) | 0;
+    }
+    for (i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;
+  }
+  for (i = 0; i < 8; i++) for (j = 3; j + 1; j--) { const b = (hash[i] >> (j * 8)) & 255; result += (b < 16 ? '0' : '') + b.toString(16); }
+  return result;
+}
+
+// ---------- backends: Firebase (online) or this browser only (demo) ----------
+function localBackend() {
+  const KEY = ROOT + '-demo';
+  const bc = 'BroadcastChannel' in window ? new BroadcastChannel(KEY) : null;
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
+  const subs = [];
+  const emit = () => { const db = read(); subs.forEach(f => f(db)); };
+  const write = db => { store.set(KEY, JSON.stringify(db)); emit(); if (bc) bc.postMessage(1); };
+  if (bc) bc.onmessage = emit;
+  window.addEventListener('storage', e => { if (e.key === KEY) emit(); });
+  const getP = (db, p) => p.split('/').reduce((o, k) => (o == null ? o : o[k]), db);
+  const setP = (db, p, v) => {
+    const ks = p.split('/'); let o = db;
+    ks.slice(0, -1).forEach(k => { if (!o[k] || typeof o[k] !== 'object') o[k] = {}; o = o[k]; });
+    if (v == null) delete o[ks[ks.length - 1]]; else o[ks[ks.length - 1]] = v;
+  };
+  return {
+    mode: 'demo',
+    now: () => Date.now(),
+    subscribe(cb) { subs.push(cb); setTimeout(() => cb(read()), 0); },
+    async set(p, v) { const db = read(); setP(db, p, v); write(db); },
+    async update(p, obj) { const db = read(); for (const k in obj) setP(db, p ? p + '/' + k : k, obj[k]); write(db); },
+    async push(p, v) { const db = read(); setP(db, p + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), v); write(db); },
+    async tx(p, fn) {
+      const db = read(); const cur = getP(db, p);
+      const nv = fn(cur == null ? null : JSON.parse(JSON.stringify(cur)));
+      if (nv === undefined) return { committed: false };
+      setP(db, p, nv); write(db); return { committed: true };
+    },
+    presence() {},
+  };
+}
+
+async function firebaseBackend(cfg) {
+  const V = '10.12.2';
+  const appMod = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
+  const d = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-database.js`);
+  const db = d.getDatabase(appMod.initializeApp(cfg));
+  const R = p => d.ref(db, p ? ROOT + '/' + p : ROOT);
+  let offset = 0;
+  d.onValue(d.ref(db, '.info/serverTimeOffset'), s => { offset = s.val() || 0; });
+  return {
+    mode: 'online',
+    now: () => Date.now() + offset,
+    subscribe(cb) { d.onValue(d.ref(db, ROOT), s => cb(s.val() || {}), err => showError(err)); },
+    set: (p, v) => d.set(R(p), v),
+    update: (p, obj) => d.update(R(p), obj),
+    push: (p, v) => d.push(R(p), v),
+    async tx(p, fn) { const r = await d.runTransaction(R(p), cur => fn(cur)); return { committed: r.committed }; },
+    presence(pid) {
+      const r = R('online/' + pid);
+      d.onValue(d.ref(db, '.info/connected'), s => { if (s.val()) { d.onDisconnect(r).remove(); d.set(r, true); } });
+    },
+  };
+}
+
+function showError(err) {
+  $('loading').hidden = false;
+  $('loading').textContent = 'Could not reach the game database: ' + (err && err.message ? err.message : err) + '. Check config.js and the Firebase database rules (README.md).';
+}
+
+// ---------- state ----------
+let B = null;            // backend
+let DB = {};             // latest snapshot of the whole game
+let pid = store.get('er-pid');
+if (!pid) { pid = 'p' + Math.random().toString(36).slice(2, 10); store.set('er-pid', pid); }
+const hostKey = new URLSearchParams(location.search).get('host');
+const isHost = !!hostKey && hostKey === window.HOST_KEY;
+let wall = 0, selected = null, lastScene = '', presenceOn = false;
+
+const game = () => DB.game || { phase: 'lobby' };
+const me = () => (DB.players || {})[pid];
+const team = k => { const t = (DB.teams || {})[k] || {}; return { flags: t.flags || {}, inv: t.inv || {}, hints: t.hints || {}, escapedAt: t.escapedAt || null }; };
+const feedOf = k => Object.values((DB.feed || {})[k] || {}).sort((a, b) => a.t - b.t).slice(-80);
+const playersOf = k => Object.entries(DB.players || {}).filter(([, p]) => p.team === k).map(([id, p]) => ({ id, name: p.name, on: B.mode === 'demo' || !!(DB.online || {})[id] }));
+const progress = k => { const r = PZ[TEAMS[k].room]; const f = team(k).flags; return r.steps.filter(s => f[s]).length; };
+const fmt = ms => { ms = Math.max(0, ms | 0); const s = Math.floor(ms / 1000); const h = Math.floor(s / 3600); const m = Math.floor(s / 60) % 60; const ss = String(s % 60).padStart(2, '0'); return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + ss; };
+const elapsedFor = k => { const g = game(); const t = team(k); if (t.escapedAt) return t.escapedAt; if (g.phase !== 'playing' || !g.startedAt) return 0; return B.now() - g.startedAt; };
+
+// ---------- rendering ----------
+function render() {
+  $('loading').hidden = true;
+  $('demo').hidden = B.mode !== 'demo';
+  renderBoard();
+  renderBanner();
+  if (isHost) { $('host').hidden = false; $('join').hidden = true; $('game').hidden = true; renderHost(); return; }
+  const m = me();
+  if (!m || !TEAMS[m.team]) { $('join').hidden = false; $('game').hidden = true; renderJoin(); return; }
+  if (!presenceOn) { presenceOn = true; B.presence(pid); }
+  $('join').hidden = true; $('game').hidden = false;
+  document.documentElement.style.setProperty('--team', TEAMS[m.team].color);
+  const room = PZ[TEAMS[m.team].room];
+  $('roomtitle').textContent = room.title;
+  $('roomintro').textContent = room.intro;
+  renderPeople(m.team);
+  renderScene(m.team);
+  renderBag(m.team);
+  renderFeed($('feed'), m.team);
+  const used = Object.keys(team(m.team).hints).length;
+  $('hint').textContent = used >= MAX_HINTS ? 'No hints left' : `Get a hint (${MAX_HINTS - used} left)`;
+  $('hint').disabled = game().phase !== 'playing' || !!team(m.team).escapedAt;
+}
+
+function renderBoard() {
+  const m = me(); const g = game();
+  $('board').innerHTML = ['A', 'B'].map(k => {
+    const t = team(k); const room = PZ[TEAMS[k].room]; const p = progress(k); const n = playersOf(k).length;
+    let st = `${p}/${room.steps.length} · ${n} player${n === 1 ? '' : 's'}`, cls = '';
+    if (t.escapedAt) { st = (g.winner === k ? 'WINNER · ' : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
+    return `<div class="chip ${k}${m && m.team === k ? ' mine' : ''}"><div class="row"><span class="nm">${TEAMS[k].name}</span><span class="st ${cls}">${st}</span></div><div class="bar"><i style="width:${(p / room.steps.length) * 100}%"></i></div></div>`;
+  }).join('');
+  tick();
+}
+
+function renderBanner() {
+  const g = game(); const m = me(); const el = $('banner');
+  if (g.winner && TEAMS[g.winner]) {
+    const wt = team(g.winner);
+    const mine = m && m.team === g.winner;
+    el.textContent = mine ? `Your team escaped first in ${fmt(wt.escapedAt)} and wins!`
+      : `${TEAMS[g.winner].name} escaped first in ${fmt(wt.escapedAt)} and wins!` + (m && !team(m.team).escapedAt ? ' You can still finish your room.' : '');
+    el.hidden = false;
+  } else el.hidden = true;
+}
+
+function tick() {
+  const m = me(); const g = game();
+  let ms = 0;
+  if (m && TEAMS[m.team]) ms = elapsedFor(m.team);
+  else if (g.phase === 'playing' && g.startedAt) ms = B.now() - g.startedAt;
+  $('clock').textContent = fmt(ms);
+}
+
+function renderJoin() {
+  $('teampicks').innerHTML = ['A', 'B'].map(k => {
+    const ps = playersOf(k); const room = PZ[TEAMS[k].room];
+    return `<button class="teampick ${k}" data-team="${k}"><span class="nm">${TEAMS[k].name}</span><span class="rm">${esc(room.title)}</span><span class="who">${ps.length ? ps.length + ' joined: ' + ps.map(p => esc(p.name)).join(', ') : 'No one yet'}</span></button>`;
+  }).join('');
+  if (!$('name').value) $('name').value = store.get('er-name') || '';
+}
+
+function renderPeople(k) {
+  $('people').innerHTML = playersOf(k).map(p => `<li class="${p.on ? 'on' : ''}${p.id === pid ? ' me' : ''}">${esc(p.name)}${p.id === pid ? ' (you)' : ''}</li>`).join('');
+}
+
+function renderFeed(el, k) {
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  const g = game();
+  const items = feedOf(k);
+  el.innerHTML = items.length ? items.map(e => {
+    const tm = g.startedAt && e.t >= g.startedAt ? fmt(e.t - g.startedAt) : '';
+    return e.kind === 'chat'
+      ? `<li><time>${tm}</time><b>${esc(e.who)}:</b> ${esc(e.text)}</li>`
+      : `<li class="ev"><time>${tm}</time><b>${esc(e.who)}</b> ${esc(e.text)}</li>`;
+  }).join('') : '<li class="ev">Nothing yet. Finds, codes and hints show up here for the whole team.</li>';
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function renderBag(k) {
+  const room = PZ[TEAMS[k].room]; const inv = team(k).inv;
+  const ids = Object.keys(inv).filter(id => room.items[id]).sort((a, b) => inv[a] - inv[b]);
+  if (selected && !inv[selected]) selected = null;
+  $('items').innerHTML = ids.length ? ids.map(id => `<button class="item" data-item="${id}" aria-pressed="${selected === id}">${ICONS[id] || ''}<span>${esc(room.items[id].name)}</span></button>`).join('')
+    : '<p class="empty">Empty. Anything your team finds appears here for everyone.</p>';
+  $('itemnote').innerHTML = selected ? `<b>${esc(room.items[selected].name)}:</b> ${esc(room.items[selected].desc)} Now tap something in the room to use it, or tap the item again to put it away.` : (ids.length ? 'Tap an item to read it or use it on something.' : '');
+  $('stage').classList.toggle('using', !!selected);
+}
+
+function renderScene(k) {
+  const room = TEAMS[k].room; const t = team(k); const g = game();
+  const key = [room, wall, Object.keys(t.flags).sort().join(','), g.phase, !!t.escapedAt].join('|');
+  const walls = PZ[room].walls;
+  $('wallname').innerHTML = `${esc(walls[wall])}<small>Wall ${wall + 1} of ${walls.length}</small>`;
+  if (key !== lastScene) { lastScene = key; $('scene').innerHTML = SCENES[room][wall](t.flags); }
+  const veil = $('veil');
+  if (g.phase !== 'playing' && !t.escapedAt) {
+    veil.innerHTML = `<div><h2>Get ready</h2><p>${esc(PZ[room].intro)}</p><p style="margin-top:10px">Waiting for the host to start the game. ${playersOf(k).length} on your team so far.</p></div>`;
+    veil.hidden = false;
+  } else if (t.escapedAt) {
+    const won = g.winner === k;
+    veil.innerHTML = `<div><h2>${won ? 'You won!' : 'You escaped'}</h2><p>Your team got out in <b>${fmt(t.escapedAt)}</b>${won ? ', first of both teams.' : '.'}</p></div>`;
+    veil.hidden = false;
+  } else veil.hidden = true;
+}
+
+function renderHost() {
+  $('sharelink').textContent = location.origin + location.pathname;
+  const g = game();
+  $('hstart').textContent = g.phase === 'playing' ? 'Game running' : 'Start game';
+  $('hstart').disabled = g.phase === 'playing';
+  $('hostgrid').innerHTML = ['A', 'B'].map(k => {
+    const room = PZ[TEAMS[k].room]; const t = team(k); const ps = playersOf(k);
+    return `<div class="card ${k}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
+      <ul class="people">${ps.map(p => `<li class="${p.on ? 'on' : ''}">${esc(p.name)}</li>`).join('') || '<li>No players</li>'}</ul>
+      <p class="label" style="margin-top:14px">Feed</p><ul class="feed" data-feed="${k}"></ul></div>`;
+  }).join('');
+  document.querySelectorAll('[data-feed]').forEach(el => renderFeed(el, el.dataset.feed));
+}
+
+// ---------- modal ----------
+let codeTarget = null;
+function openModal({ title, msg, table, prompt }, target) {
+  $('mtitle').textContent = title || '';
+  $('mtitle').hidden = !title;
+  $('mmsg').textContent = msg || '';
+  $('mtable').innerHTML = table ? PTABLE : '';
+  codeTarget = prompt ? target : null;
+  $('mcode').hidden = !prompt; $('mok').hidden = !!prompt;
+  $('modal').hidden = false;
+  if (prompt) {
+    const room = PZ[TEAMS[me().team].room]; const c = room.targets[target].code;
+    const inp = $('mcodein');
+    inp.value = ''; inp.maxLength = c.len; inp.placeholder = (c.kind === 'digits' ? '0' : 'A').repeat(c.len);
+    inp.inputMode = c.kind === 'digits' ? 'numeric' : 'text';
+    $('mcodeerr').textContent = '';
+    setTimeout(() => inp.focus(), 30);
+  } else setTimeout(() => $('mok').querySelector('button').focus(), 30);
+}
+function closeModal() { $('modal').hidden = true; codeTarget = null; }
+$('modal').addEventListener('click', e => { if (e.target.id === 'modal' || e.target.hasAttribute('data-close')) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('modal').hidden) closeModal();
+  if ($('modal').hidden && !$('game').hidden && document.activeElement.tagName !== 'INPUT') {
+    if (e.key === 'ArrowLeft') turn(-1);
+    if (e.key === 'ArrowRight') turn(1);
+  }
+});
+$('mcode').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!codeTarget) return;
+  const res = await act('code', codeTarget, null, $('mcodein').value);
+  if (res.wrong) {
+    $('mcodeerr').textContent = res.msg;
+    $('mcode').classList.remove('shake'); void $('mcode').offsetWidth; $('mcode').classList.add('shake');
+    $('mcodein').select();
+  } else openModal(res);
+});
+
+// ---------- actions ----------
+function normalize(v, kind) { v = String(v || '').toUpperCase(); return kind === 'digits' ? v.replace(/\D/g, '') : v.replace(/[^A-Z]/g, ''); }
+
+async function act(type, target, item, value) {
+  const m = me(); if (!m) return { msg: '' };
+  const k = m.team; const room = PZ[TEAMS[k].room]; const tg = room.targets[target];
+  if (!tg) return { msg: 'Nothing interesting there.' };
+  const g = game();
+  if (g.phase !== 'playing') return { msg: 'The game has not started yet.' };
+  let codeOk = false, tried = '';
+  if (type === 'code') { tried = normalize(value, tg.code.kind); codeOk = tg.code.hashes.includes(sha256('escape-race|' + tried)); }
+  let result = null, events = [], escaped = false;
+  await B.tx('teams/' + k, cur => {
+    const t = cur || {}; t.flags = t.flags || {}; t.inv = t.inv || {};
+    result = null; events = []; escaped = false; let changed = false;
+    if (t.escapedAt) { result = { msg: 'Your team has already escaped!' }; return undefined; }
+    const h = {
+      done: f => !!t.flags[f],
+      by: f => (t.flags[f] && t.flags[f].by) || 'a teammate',
+      has: id => !!t.inv[id],
+      give: id => { if (!t.inv[id]) { t.inv[id] = B.now(); changed = true; } },
+      take: id => { if (t.inv[id]) { delete t.inv[id]; changed = true; } },
+      set: (f, txt) => { if (!t.flags[f]) { t.flags[f] = { by: m.name, at: B.now() }; changed = true; if (txt) events.push(txt); } },
+      escape: () => { if (!t.escapedAt) { t.flags.escaped = { by: m.name, at: B.now() }; t.escapedAt = Math.max(1, B.now() - g.startedAt); changed = true; escaped = true; events.push('opened the exit door. The team escaped!'); } },
+    };
+    if (type === 'inspect') result = tg.inspect(h);
+    else if (type === 'use') {
+      if (!t.inv[item]) result = { msg: 'That item is no longer in your team\'s bag.' };
+      else if (tg.use && tg.use[item]) result = tg.use[item](h);
+      else result = { msg: `The ${room.items[item].name.toLowerCase()} does nothing here.` };
+    } else if (type === 'code') {
+      if (!tg.code.open(h)) result = tg.inspect(h);
+      else if (codeOk) result = tg.code.solve(h);
+      else result = { msg: `${tried || 'That'} is not the code.`, wrong: true };
+    }
+    return changed ? t : undefined;
+  });
+  if (typeof result === 'string') result = { msg: result };
+  result = result || { msg: '' };
+  if (type === 'code' && result.wrong && tried) events.push(`tried ${tried} on the ${LABELS[target] || target}. Wrong.`);
+  for (const text of events) B.push('feed/' + k, { t: B.now(), who: m.name, text, kind: 'event' });
+  if (escaped) await B.tx('game/winner', cur => (cur ? undefined : k));
+  if (type === 'use') selected = null;
+  return result;
+}
+
+async function getHint() {
+  const m = me(); if (!m) return;
+  const k = m.team; const room = PZ[TEAMS[k].room];
+  let res = null, fresh = false;
+  await B.tx('teams/' + k, cur => {
+    const t = cur || {}; t.flags = t.flags || {}; t.hints = t.hints || {}; res = null; fresh = false;
+    const step = room.steps.find(s => !t.flags[s]);
+    if (!step) { res = 'Nothing left to hint.'; return undefined; }
+    if (t.hints[step]) { res = room.hints[step]; return undefined; }
+    if (Object.keys(t.hints).length >= MAX_HINTS) { res = 'Your team has used all its hints.'; return undefined; }
+    t.hints[step] = { by: m.name, at: B.now() }; res = room.hints[step]; fresh = true;
+    return t;
+  });
+  if (fresh) B.push('feed/' + k, { t: B.now(), who: m.name, text: 'used a hint: "' + res + '"', kind: 'event' });
+  openModal({ title: 'Hint', msg: res });
+}
+
+function turn(d) { wall = (wall + d + 4) % 4; store.set('er-wall', wall); selected = null; render(); }
+$('left').onclick = () => turn(-1);
+$('right').onclick = () => turn(1);
+$('hint').onclick = getHint;
+
+$('scene').addEventListener('click', async e => {
+  const hot = e.target.closest('[data-t]'); if (!hot) return;
+  const target = hot.dataset.t;
+  const res = selected ? await act('use', target, selected) : await act('inspect', target);
+  render();
+  if (res.msg || res.title) openModal(res, target);
+});
+$('scene').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.t) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+
+$('items').addEventListener('click', e => {
+  const b = e.target.closest('[data-item]'); if (!b) return;
+  selected = selected === b.dataset.item ? null : b.dataset.item; render();
+});
+
+$('teampicks').addEventListener('click', async e => {
+  const b = e.target.closest('[data-team]'); if (!b) return;
+  const name = $('name').value.trim().replace(/\s+/g, ' ');
+  if (!name) { $('joinerr').textContent = 'Type your name first, so your team knows who found what.'; $('name').focus(); return; }
+  store.set('er-name', name);
+  await B.set('players/' + pid, { name, team: b.dataset.team, at: B.now() });
+});
+
+$('chat').addEventListener('submit', e => {
+  e.preventDefault();
+  const m = me(); const text = $('chatmsg').value.trim();
+  if (!m || !text) return;
+  B.push('feed/' + m.team, { t: B.now(), who: m.name, text: text.slice(0, 200), kind: 'chat' });
+  $('chatmsg').value = '';
+});
+
+// host controls; the two resets ask for a second click
+let pending = null;
+function confirmHost(kind, label, fn) {
+  if (pending === kind) { pending = null; $('hconfirm').textContent = ''; fn(); return; }
+  pending = kind; $('hconfirm').textContent = `Click "${label}" again to confirm.`;
+  setTimeout(() => { if (pending === kind) { pending = null; $('hconfirm').textContent = ''; } }, 4000);
+}
+$('hstart').onclick = () => B.set('game', { phase: 'playing', startedAt: B.now(), winner: null });
+$('hreset').onclick = () => confirmHost('reset', 'Reset rooms', () => B.update('', { game: { phase: 'lobby' }, teams: null, feed: null }));
+$('hclear').onclick = () => confirmHost('clear', 'Reset rooms and remove players', () => B.update('', { game: { phase: 'lobby' }, teams: null, feed: null, players: null }));
+
+// ---------- art ----------
+const PTABLE = '<div class="ptable">' + [['H', 1, 'Hydrogen'], ['He', 2, 'Helium'], ['Li', 3, 'Lithium'], ['Be', 4, 'Beryllium'], ['B', 5, 'Boron'], ['C', 6, 'Carbon'], ['N', 7, 'Nitrogen'], ['O', 8, 'Oxygen'], ['F', 9, 'Fluorine'], ['Ne', 10, 'Neon']]
+  .map(([s, n, nm]) => `<div><em>${n}</em><b>${s}</b><span>${nm}</span></div>`).join('') + '</div>';
+
+const ICONS = {
+  brasskey: '<svg viewBox="0 0 40 40"><circle cx="13" cy="20" r="7" fill="none" stroke="#d9a73e" stroke-width="4"/><path d="M20 20h15M30 20v6M35 20v5" stroke="#d9a73e" stroke-width="4" fill="none"/></svg>',
+  uvlight: '<svg viewBox="0 0 40 40"><rect x="6" y="16" width="20" height="9" rx="2" fill="#555b66"/><path d="M26 14h5l4-4v21l-4-4h-5z" fill="#7c8391"/><circle cx="34" cy="20" r="3" fill="#c48bff"/></svg>',
+  memo: '<svg viewBox="0 0 40 40"><rect x="9" y="6" width="22" height="28" fill="#f1ead7"/><path d="M13 13h14M13 18h14M13 23h10" stroke="#8a8170" stroke-width="2"/></svg>',
+  fuse: '<svg viewBox="0 0 40 40"><rect x="6" y="15" width="6" height="10" fill="#b9bec7"/><rect x="28" y="15" width="6" height="10" fill="#b9bec7"/><rect x="12" y="16" width="16" height="8" fill="#bfe6f2" opacity=".7"/><path d="M12 20h16" stroke="#555" stroke-width="1.5"/></svg>',
+  reagent: '<svg viewBox="0 0 40 40"><rect x="12" y="14" width="16" height="22" rx="3" fill="#4cc4b2"/><rect x="16" y="7" width="8" height="7" fill="#ddd"/><path d="M24 9h7" stroke="#ddd" stroke-width="3"/></svg>',
+};
+
+const hot = (t, inner, label) => `<g class="hot" data-t="${t}" tabindex="0" role="button" aria-label="${label || t}">${inner}</g>`;
+const handPt = (cx, cy, len, deg) => { const a = deg * Math.PI / 180; return [cx + len * Math.sin(a), cy - len * Math.cos(a)].map(v => v.toFixed(1)); };
+
+function officeBase() {
+  let planks = '';
+  for (let x = -40; x < 820; x += 70) planks += `<line x1="${x}" y1="450" x2="${x + 40}" y2="360" stroke="#5e4128" stroke-width="2"/>`;
+  return `<rect width="800" height="360" fill="#cdb898"/><rect y="0" width="800" height="360" fill="url(#wp)" opacity=".18"/>
+    <defs><pattern id="wp" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M20 0v40" stroke="#8c7451" stroke-width="2"/></pattern>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <rect y="352" width="800" height="10" fill="#6f553a"/><rect y="360" width="800" height="90" fill="#7a5a3a"/>${planks}`;
+}
+function labBase(f) {
+  let tiles = '';
+  for (let x = 0; x <= 800; x += 50) tiles += `<line x1="${x}" y1="360" x2="${(x - 400) * 1.35 + 400}" y2="450" stroke="#7d8a8c" stroke-width="1.5"/>`;
+  tiles += '<line x1="0" y1="395" x2="800" y2="395" stroke="#7d8a8c"/><line x1="0" y1="425" x2="800" y2="425" stroke="#7d8a8c"/>';
+  return `<defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <rect width="800" height="360" fill="#d3dcda"/><rect y="0" width="800" height="18" fill="#b8c4c2"/>
+    ${[100, 400, 700].map(x => `<rect x="${x - 70}" y="0" width="140" height="10" fill="${f.power ? '#fffbe6' : '#8d9796'}"/>`).join('')}
+    <rect y="350" width="800" height="12" fill="#6d7a7c"/><rect y="360" width="800" height="90" fill="#9fabac"/>${tiles}`;
+}
+function labDark(f) {
+  return f.power ? '' : `<g pointer-events="none"><rect width="800" height="450" fill="#03060c" opacity=".66"/>
+    <circle cx="760" cy="30" r="9" fill="#ff4a4a"/><circle cx="760" cy="30" r="60" fill="#ff4a4a" opacity=".12"/>
+    <text x="400" y="430" text-anchor="middle" fill="#ff8a80" font-family="JetBrains Mono, monospace" font-size="14">POWER OFF · EMERGENCY LIGHTING</text></g>`;
+}
+
+const BOOKS = [
+  ['B', 'R', 'g', 'B', 'n', 'B', 'G'],
+  ['g', 'B', 'R', 'n', 'B', 'B', 'g'],
+  ['R', 'G', 'B', 'n', 'g'],
+];
+const BOOKCOL = { R: '#b8392f', B: '#2c5ea8', G: '#3c8c4c', g: '#8e9196', n: '#6e4a2b' };
+
+const SCENES = {
+  office: [
+    // 0 exit door + clock
+    f => {
+      const [hx, hy] = handPt(190, 140, 22, (7 + 40 / 60) * 30);
+      const [mx, my] = handPt(190, 140, 33, 240);
+      let ticks = '';
+      for (let i = 0; i < 12; i++) { const [x1, y1] = handPt(190, 140, 36, i * 30); const [x2, y2] = handPt(190, 140, i % 3 ? 33 : 30, i * 30); ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#2c2018" stroke-width="${i % 3 ? 2 : 3.5}"/>`; }
+      const open = f.escaped;
+      return officeBase() + `
+        <rect x="360" y="48" width="90" height="30" rx="3" fill="#1f7a3a"/><text x="405" y="70" text-anchor="middle" fill="#e9ffe9" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="20">EXIT</text>
+        ${hot('door', `<rect x="322" y="88" width="166" height="272" fill="#4a3020"/>
+          ${open ? '<rect x="332" y="98" width="146" height="262" fill="#111"/><polygon points="332,98 380,110 380,350 332,360" fill="#6b4630"/>'
+          : `<rect x="332" y="98" width="146" height="262" fill="#7b5236"/><rect x="348" y="114" width="114" height="100" fill="none" stroke="#5f3e28" stroke-width="5"/><rect x="348" y="230" width="114" height="110" fill="none" stroke="#5f3e28" stroke-width="5"/><circle cx="462" cy="232" r="7" fill="#d9b24a"/>`}
+          <rect x="500" y="196" width="34" height="52" rx="4" fill="#2c2f36"/><rect x="505" y="201" width="24" height="9" fill="${open ? '#73d38a' : '#5c2a2a'}"/>
+          ${[0, 1, 2].map(r => [0, 1, 2].map(c => `<rect x="${505 + c * 8.5}" y="${215 + r * 9.5}" width="6" height="7" fill="#c9ccd3"/>`).join('')).join('')}`, 'Exit door and keypad')}
+        ${hot('clock', `<circle cx="190" cy="140" r="44" fill="#3a2a1d"/><circle cx="190" cy="140" r="39" fill="#f4efe2"/>${ticks}
+          <line x1="190" y1="140" x2="${hx}" y2="${hy}" stroke="#1b1410" stroke-width="5" stroke-linecap="round"/>
+          <line x1="190" y1="140" x2="${mx}" y2="${my}" stroke="#1b1410" stroke-width="3" stroke-linecap="round"/><circle cx="190" cy="140" r="4" fill="#b8392f"/>`, 'Wall clock')}
+        <rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><path d="M620 135h70M620 150h70M620 165h40" stroke="#9a8e74" stroke-width="3"/>
+        <ellipse cx="405" cy="410" rx="170" ry="26" fill="#8e3b2e" opacity=".85"/>`;
+    },
+    // 1 desk
+    f => officeBase() + `
+      <rect x="560" y="70" width="140" height="100" fill="#efe7d4" stroke="#4a3527" stroke-width="5"/><path d="M575 95h110M575 112h110M575 129h80" stroke="#b0a58c" stroke-width="3"/><text x="630" y="160" text-anchor="middle" font-size="12" fill="#6d5f49" font-family="Figtree, sans-serif">Q3 TARGETS</text>
+      <rect x="150" y="252" width="500" height="20" fill="#5a3b25"/><rect x="165" y="272" width="16" height="88" fill="#4a3020"/>
+      ${hot('computer', `<rect x="230" y="140" width="170" height="104" rx="6" fill="#23262d"/><rect x="240" y="150" width="150" height="84" fill="${f.pc ? '#2f6db3' : '#0e1015'}"/>
+        ${f.pc ? '<rect x="252" y="162" width="70" height="40" fill="#f3ef9a"/><path d="M258 175h56M258 185h50M258 195h40" stroke="#8c8740" stroke-width="2"/>' : '<text x="315" y="198" text-anchor="middle" fill="#6f7686" font-family="JetBrains Mono, monospace" font-size="13">PASSWORD?</text>'}
+        <rect x="300" y="244" width="30" height="10" fill="#23262d"/><rect x="270" y="250" width="90" height="4" fill="#23262d"/>`, 'Computer')}
+      <rect x="420" y="232" width="18" height="20" fill="#e9e2cf"/><path d="M438 238q8 2 0 10" stroke="#e9e2cf" stroke-width="3" fill="none"/>
+      <path d="M190 252l18-60h-14l-12-40" stroke="#2c2f36" stroke-width="5" fill="none"/><polygon points="168,150 200,140 206,162" fill="#2c2f36"/>
+      ${hot('drawer', `<rect x="470" y="272" width="170" height="88" fill="#6a4630"/>
+        <rect x="${f.drawer ? 462 : 478}" y="${f.drawer ? 276 : 280}" width="${f.drawer ? 186 : 154}" height="${f.drawer ? 40 : 34}" fill="${f.drawer ? '#80573b' : '#7b5236'}" stroke="#4a3020" stroke-width="3"/>
+        <circle cx="555" cy="${f.drawer ? 296 : 297}" r="4" fill="#d9b24a"/>${f.drawer ? '' : '<rect x="553" y="304" width="4" height="6" fill="#2a1b10"/>'}
+        <rect x="478" y="320" width="154" height="34" fill="#7b5236" stroke="#4a3020" stroke-width="3"/><circle cx="555" cy="337" r="4" fill="#d9b24a"/>`, 'Desk drawer')}`,
+    // 2 painting + bookshelf
+    f => {
+      let books = '';
+      BOOKS.forEach((row, r) => {
+        let x = 452; const yb = 168 + r * 82;
+        row.forEach((c, i) => { const w = 24 + ((i * 7 + r * 3) % 4) * 3; const h = 58 + ((i * 5 + r) % 4) * 5; books += `<rect x="${x}" y="${yb - h}" width="${w}" height="${h}" fill="${BOOKCOL[c]}"/><rect x="${x + 3}" y="${yb - h + 10}" width="${w - 6}" height="4" fill="#000" opacity=".2"/>`; x += w + 4; });
+      });
+      return officeBase() + `
+        ${hot('painting', `<rect x="70" y="92" width="290" height="190" fill="#3b2a1d"/><rect x="82" y="104" width="266" height="166" fill="#e9a35c"/>
+          <rect x="82" y="104" width="266" height="80" fill="#c86f4a"/><circle cx="270" cy="180" r="24" fill="#f6d27c"/>
+          <rect x="82" y="190" width="266" height="80" fill="#335a74"/><path d="M82 205h266M82 225h266M82 245h266" stroke="#46708c" stroke-width="3"/>
+          <path d="M140 200l20-40v40zM150 200h40l-6 10h-30z" fill="#2d2420"/>
+          <circle cx="120" cy="130" r="12" fill="#b9623e" opacity=".8"/><circle cx="200" cy="125" r="10" fill="#b9623e" opacity=".8"/><circle cx="300" cy="135" r="13" fill="#b9623e" opacity=".8"/>
+          ${f.uv ? '<rect x="82" y="104" width="266" height="86" fill="#2a0f4a" opacity=".55"/><text x="215" y="160" text-anchor="middle" fill="#e6c4ff" filter="url(#glow)" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="46" letter-spacing="14">MAPLE</text>' : ''}`, 'Painting')}
+        ${hot('shelf', `<rect x="430" y="70" width="300" height="290" fill="#5a3b25"/><rect x="442" y="82" width="276" height="270" fill="#3f2919"/>
+          <rect x="442" y="168" width="276" height="10" fill="#5a3b25"/><rect x="442" y="250" width="276" height="10" fill="#5a3b25"/><rect x="442" y="332" width="276" height="10" fill="#5a3b25"/>${books}`, 'Bookshelf')}`;
+    },
+    // 3 window, plant, cabinet, bin
+    f => officeBase() + `
+      ${hot('window', `<rect x="80" y="70" width="230" height="170" fill="#e7dcc6"/><rect x="92" y="82" width="206" height="146" fill="#9cc6df"/>
+        <rect x="110" y="150" width="30" height="78" fill="#6d8aa0"/><rect x="150" y="120" width="38" height="108" fill="#5b7a91"/><rect x="200" y="160" width="26" height="68" fill="#6d8aa0"/><rect x="236" y="135" width="44" height="93" fill="#5b7a91"/>
+        <path d="M195 82v146M92 155h206" stroke="#e7dcc6" stroke-width="8"/>`, 'Window')}
+      ${hot('plant', `<path d="M180 300q-40-60-10-120M190 300q10-80 50-110M185 300q-60-30-80-80M195 300q50-30 70-70M188 300q0-70-10-140" stroke="#2f6b3a" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <ellipse cx="170" cy="180" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="240" cy="192" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="105" cy="222" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="265" cy="232" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="178" cy="160" rx="14" ry="7" fill="#3c8c4c"/>
+        <polygon points="140,300 240,300 228,372 152,372" fill="#b5653e"/><rect x="134" y="292" width="112" height="14" fill="#c97448"/>`, 'Plant pot')}
+      ${hot('cabinet', `<rect x="450" y="150" width="150" height="212" fill="#7f8792"/>
+        ${[0, 1, 2].map(i => `<rect x="${f.cabinet && i === 0 ? 444 : 460}" y="${162 + i * 66}" width="${f.cabinet && i === 0 ? 162 : 130}" height="56" fill="#98a0aa" stroke="#646b75" stroke-width="3"/><rect x="${f.cabinet && i === 0 ? 505 : 510}" y="${178 + i * 66}" width="30" height="8" fill="#555b66"/>`).join('')}
+        <circle cx="525" cy="${208}" r="10" fill="#2c2f36"/><circle cx="525" cy="208" r="6" fill="#c9ccd3"/><line x1="525" y1="208" x2="525" y2="202" stroke="#2c2f36" stroke-width="2"/>`, 'Filing cabinet')}
+      ${hot('bin', `<polygon points="640,300 700,300 692,362 648,362" fill="#3d434d"/><path d="M652 300l-2-8 10 4 6-10 6 9 10-5-2 10" fill="#f1ead7"/>`, 'Bin')}`,
+  ],
+  lab: [
+    // 0 exit door + sink
+    f => {
+      const wheels = f.escaped ? 'NEON' : '????';
+      return labBase(f) + `
+        <g>${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<polygon points="${330 + i * 20},64 ${342 + i * 20},64 ${332 + i * 20},84 ${320 + i * 20},84" fill="${i % 2 ? '#222' : '#f2c230'}"/>`).join('')}</g>
+        ${hot('door', `<rect x="320" y="84" width="170" height="276" fill="#6f7b80"/>
+          ${f.escaped ? '<rect x="330" y="94" width="150" height="266" fill="#0b0e12"/>' : '<rect x="330" y="94" width="72" height="266" fill="#a8b4b8"/><rect x="408" y="94" width="72" height="266" fill="#a8b4b8"/><rect x="345" y="120" width="42" height="70" fill="#7fb6c8" opacity=".6"/><rect x="423" y="120" width="42" height="70" fill="#7fb6c8" opacity=".6"/>'}
+          <rect x="505" y="190" width="90" height="44" rx="5" fill="#2c2f36"/>
+          ${wheels.split('').map((c, i) => `<rect x="${512 + i * 20}" y="198" width="16" height="28" fill="#e8e6dd"/><text x="${520 + i * 20}" y="219" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" fill="#222">${c}</text>`).join('')}`, 'Exit door with letter lock')}
+        ${hot('sink', `<rect x="60" y="250" width="200" height="110" fill="#8b979a"/><rect x="50" y="240" width="220" height="16" fill="#c7d0d2"/><rect x="100" y="244" width="120" height="10" fill="#7d898c"/>
+          <path d="M160 240v-40h30v12" stroke="#a9b3b6" stroke-width="8" fill="none"/><circle cx="190" cy="222" r="3" fill="#7fb6c8"/>`, 'Sink')}
+        <rect x="640" y="110" width="100" height="70" rx="4" fill="#1f8a5b"/><text x="690" y="140" text-anchor="middle" fill="#fff" font-family="Figtree, sans-serif" font-weight="700" font-size="13">EYE WASH</text><text x="690" y="160" text-anchor="middle" fill="#fff" font-family="Figtree, sans-serif" font-size="11">STATION</text>` + labDark(f);
+    },
+    // 1 bench: tubes + microscope
+    f => {
+      const tubes = [['#2c5ea8', 'C'], ['#c8352b', 'H'], ['#3c9c50', 'O'], ['#e6c229', 'N']];
+      return labBase(f) + `
+        <rect x="80" y="70" width="640" height="14" fill="#b8c4c2"/><rect x="80" y="84" width="640" height="10" fill="#9eaaa8"/>
+        <rect x="120" y="40" width="40" height="30" fill="#8d9a9c"/><rect x="600" y="40" width="70" height="30" fill="#8d9a9c"/>
+        <rect x="60" y="262" width="680" height="18" fill="#30363f"/><rect x="80" y="280" width="640" height="80" fill="#59626c"/>
+        ${hot('tubes', `<rect x="170" y="225" width="220" height="12" fill="#8a6d4a"/><rect x="170" y="252" width="220" height="10" fill="#8a6d4a"/><rect x="176" y="237" width="8" height="15" fill="#8a6d4a"/><rect x="376" y="237" width="8" height="15" fill="#8a6d4a"/>
+          ${tubes.map(([c, s], i) => `<rect x="${196 + i * 48}" y="150" width="22" height="104" rx="11" fill="#e8f2f2" opacity=".55"/><rect x="${196 + i * 48}" y="200" width="22" height="54" rx="11" fill="${c}"/>
+            <rect x="${193 + i * 48}" y="142" width="28" height="10" fill="#c9ccd3"/>${f.power ? `<rect x="${195 + i * 48}" y="160" width="24" height="24" fill="#fff"/><text x="${207 + i * 48}" y="178" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="15" fill="#111">${s}</text>` : ''}`).join('')}`, 'Test tubes')}
+        ${hot('microscope', `<rect x="500" y="246" width="120" height="16" rx="4" fill="#2c2f36"/><path d="M590 246v-90" stroke="#2c2f36" stroke-width="16"/>
+          <rect x="520" y="200" width="80" height="10" fill="#3d434d"/><rect x="540" y="120" width="26" height="80" rx="6" transform="rotate(-20 553 160)" fill="#e8e6dd"/>
+          <rect x="533" y="96" width="24" height="26" rx="4" transform="rotate(-20 545 109)" fill="#3d434d"/><circle cx="555" cy="232" r="${f.power ? 7 : 5}" fill="${f.power ? '#fff6b0' : '#555'}" ${f.power ? 'filter="url(#glow)"' : ''}/>`, 'Microscope')}
+        <path d="M440 262l14-50v-30h16v30l14 50z" fill="#c9eef0" opacity=".7"/><path d="M445 262l9-30h32l9 30z" fill="#9b6fd1" opacity=".75"/>` + labDark(f);
+    },
+    // 2 periodic poster + fridge
+    f => {
+      const els = [['H', 1, 0, 0], ['He', 2, 0, 7], ['Li', 3, 1, 0], ['Be', 4, 1, 1], ['B', 5, 1, 2], ['C', 6, 1, 3], ['N', 7, 1, 4], ['O', 8, 1, 5], ['F', 9, 1, 6], ['Ne', 10, 1, 7]];
+      return labBase(f) + `
+        ${hot('poster', `<rect x="60" y="70" width="380" height="210" fill="#f3f1e8" stroke="#8d9a9c" stroke-width="4"/><text x="250" y="100" text-anchor="middle" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="22" fill="#2c3440">PERIODIC TABLE</text>
+          ${els.map(([s, n, r, c]) => `<rect x="${78 + c * 43}" y="${118 + r * 70}" width="39" height="62" fill="${r ? '#d7ecf0' : '#f7d9cf'}" stroke="#7d898c"/><text x="${83 + c * 43}" y="${132 + r * 70}" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#2c3440">${n}</text><text x="${97 + c * 43}" y="${162 + r * 70}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="19" font-weight="700" fill="#111">${s}</text>`).join('')}`, 'Periodic table poster')}
+        ${hot('fridge', `<rect x="500" y="80" width="180" height="280" rx="6" fill="#e9eeef" stroke="#9aa6a8" stroke-width="3"/><rect x="512" y="92" width="156" height="200" fill="${f.power ? '#bfe2ea' : '#7e9196'}" opacity=".85"/>
+          ${[0, 1, 2].map(i => `<rect x="518" y="${130 + i * 55}" width="144" height="5" fill="#9aa6a8"/>`).join('')}
+          <rect x="600" y="300" width="64" height="48" rx="4" fill="#2c2f36"/><rect x="606" y="305" width="52" height="11" fill="${f.fridge ? '#73d38a' : (f.power ? '#5c2a2a' : '#222')}"/>
+          ${[0, 1].map(r => [0, 1, 2, 3, 4].map(c => `<rect x="${606 + c * 10.5}" y="${321 + r * 12}" width="8" height="9" fill="#c9ccd3"/>`).join('')).join('')}
+          <rect x="${f.fridge ? 486 : 512}" y="300" width="${f.fridge ? 14 : 4}" height="40" fill="#9aa6a8"/>
+          <text x="590" y="285" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">SAMPLES · 4 °C</text>`, 'Sample fridge')}` + labDark(f);
+    },
+    // 3 whiteboard, coat, fuse box
+    f => labBase(f) + `
+      ${hot('whiteboard', `<rect x="60" y="76" width="350" height="200" fill="#f8faf9" stroke="#8d9a9c" stroke-width="6"/><rect x="60" y="276" width="350" height="10" fill="#8d9a9c"/>
+        <rect x="140" y="270" width="30" height="8" fill="#2c5ea8"/><rect x="180" y="270" width="30" height="8" fill="#c8352b"/>
+        ${f.board ? '<text x="235" y="180" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="44" fill="#3c9c50" opacity=".8" filter="url(#glow)">Ne + O + N</text><text x="235" y="225" text-anchor="middle" font-family="Figtree, sans-serif" font-size="20" fill="#3c9c50" opacity=".8">= the way out</text>'
+          : '<path d="M110 150q60-20 120 5t130-5M120 200q80 15 200-10" stroke="#d6dcdb" stroke-width="16" fill="none" stroke-linecap="round"/>'}`, 'Whiteboard')}
+      ${hot('coat', `<rect x="470" y="96" width="70" height="10" fill="#6d7a7c"/><path d="M505 106v12" stroke="#6d7a7c" stroke-width="4"/>
+        <path d="M480 128l25-10 25 10 10 150h-70z" fill="#f4f4f0" stroke="#c9ccd3" stroke-width="2"/><path d="M505 118v160" stroke="#c9ccd3" stroke-width="2"/>
+        <rect x="485" y="210" width="16" height="20" fill="none" stroke="#c9ccd3" stroke-width="2"/><rect x="512" y="210" width="16" height="20" fill="none" stroke="#c9ccd3" stroke-width="2"/>
+        <path d="M480 128l-14 90M530 128l14 90" stroke="#f4f4f0" stroke-width="12"/>`, 'Lab coat')}
+      ${hot('fusebox', `<rect x="610" y="110" width="120" height="150" rx="4" fill="#5d6873"/><rect x="620" y="120" width="100" height="130" fill="#3f4852"/>
+        ${[0, 1, 2].map(i => `<rect x="${632 + i * 30}" y="140" width="16" height="40" fill="${i === 1 && !f.power ? '#1a1d22' : '#bfe6f2'}" opacity="${i === 1 && !f.power ? 1 : .8}"/>`).join('')}
+        <rect x="640" y="200" width="60" height="30" fill="#2c2f36"/><rect x="${f.power ? 668 : 646}" y="204" width="24" height="22" fill="${f.power ? '#73d38a' : '#c8352b'}"/>
+        <text x="670" y="112" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">FUSES</text>`, 'Fuse box')}` + labDark(f),
+  ],
+};
+
+// ---------- boot ----------
+async function boot() {
+  try {
+    B = window.FIREBASE_CONFIG ? await firebaseBackend(window.FIREBASE_CONFIG) : localBackend();
+  } catch (err) { showError(err); return; }
+  const w = parseInt(store.get('er-wall'), 10); if (w >= 0 && w < 4) wall = w;
+  B.subscribe(db => { DB = db || {}; render(); });
+  setInterval(tick, 1000);
+  if (hostKey && !isHost) { $('loading').hidden = false; $('loading').textContent = 'That host key does not match config.js, so you are seeing the player view.'; }
+}
+boot();
+})();
+</script>
+</body>
+</html>
