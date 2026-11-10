@@ -44,6 +44,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outlin
 .trails .tp { color: var(--muted); font-variant-numeric: tabular-nums; }
 .trails .tp.ok { color: var(--good); font-weight: 700; }
 .trails .bar { grid-column: 1 / -1; margin-top: 0; height: 5px; }
+.scorewrap { overflow-x: auto; }
+.scores { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.scores th { text-align: left; font: 700 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.scores td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.scores td:nth-child(n+3), .scores th:nth-child(n+3) { text-align: right; }
+.scores tr.top td { color: var(--good); }
+.scores .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--good); color: var(--good); margin-left: 4px; }
 .hintpick { display: grid; gap: 8px; margin-bottom: 14px; }
 .hintpick .btn { display: flex; justify-content: space-between; gap: 10px; text-align: left; border-left: 4px solid var(--c, var(--line)); }
 .hintpick .btn:disabled { opacity: .45; cursor: default; }
@@ -415,6 +422,38 @@ function renderBanner() {
   } else el.hidden = true;
 }
 
+// ---------- points ----------
+// Each step a player completes first earns points for them; hints cost the player who asked.
+const POINTS = { step: 10, note: 25, escape: 50, hint: -5 };
+function scores(k) {
+  const room = PZ[TEAMS[k].room]; const t = team(k);
+  const finals = new Set((room.trails || []).map(tr => tr.steps[tr.steps.length - 1]));
+  const rows = {};
+  const row = rec => {
+    if (!rec) return null;
+    // match by player id; older entries without one fall back to the name
+    let id = rec.pid && (DB.players || {})[rec.pid] ? rec.pid : null;
+    if (!id) { const hit = playersOf(k).find(p => p.name === rec.by); id = hit ? hit.id : 'name:' + rec.by; }
+    if (!rows[id]) rows[id] = { id, name: ((DB.players || {})[id] || {}).name || rec.by || 'Someone', points: 0, finds: 0, notes: 0, hints: 0, escaped: false };
+    return rows[id];
+  };
+  playersOf(k).forEach(p => row({ pid: p.id, by: p.name }));
+  room.steps.forEach(s => {
+    const r = row(t.flags[s]); if (!r) return;
+    if (s === 'escaped') { r.points += POINTS.escape; r.escaped = true; }
+    else if (finals.has(s)) { r.points += POINTS.note; r.notes++; }
+    else { r.points += POINTS.step; r.finds++; }
+  });
+  Object.values(t.hints).forEach(h => { const r = row(h); if (r) { r.points += POINTS.hint; r.hints++; } });
+  return Object.values(rows).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+function renderScores(el, k) {
+  const list = scores(k);
+  el.innerHTML = list.length ? `<table class="scores"><thead><tr><th>#</th><th>Player</th><th>Points</th><th>Steps</th><th>Notes</th><th>Hints</th></tr></thead><tbody>` +
+    list.map((r, i) => `<tr class="${i === 0 && r.points > 0 ? 'top' : ''}"><td>${i + 1}</td><td>${esc(r.name)}${r.escaped ? ' <span class="tag">opened exit</span>' : ''}</td><td><b>${r.points}</b></td><td>${r.finds}</td><td>${r.notes}</td><td>${r.hints}</td></tr>`).join('') +
+    '</tbody></table>' : '<p class="empty">No players yet.</p>';
+}
+
 // Trail progress (co-op building): which trails are done and which notes are found.
 function renderTrails(el, k) {
   const room = PZ[TEAMS[k].room];
@@ -509,9 +548,12 @@ function renderHost() {
     return `<div class="card" style="--team:${TEAMS[k].color}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
       <ul class="people">${ps.map(p => `<li class="${p.on ? 'on' : ''}">${esc(p.name)}</li>`).join('') || '<li>No players</li>'}</ul>
       <ul class="trails" data-trails="${k}"></ul>
+      <p class="label" style="margin-top:14px">Points</p><div class="scorewrap" data-scores="${k}"></div>
+      <p class="itemnote">Step +${POINTS.step} · note +${POINTS.note} · opening the exit +${POINTS.escape} · hint ${POINTS.hint}</p>
       <p class="label" style="margin-top:14px">Feed</p><ul class="feed" data-feed="${k}"></ul></div>`;
   }).join('');
   document.querySelectorAll('[data-trails]').forEach(el => renderTrails(el, el.dataset.trails));
+  document.querySelectorAll('[data-scores]').forEach(el => renderScores(el, el.dataset.scores));
   document.querySelectorAll('[data-feed]').forEach(el => renderFeed(el, el.dataset.feed));
 }
 
@@ -576,8 +618,8 @@ async function act(type, target, item, value) {
       has: id => !!t.inv[id],
       give: id => { if (!t.inv[id]) { t.inv[id] = B.now(); changed = true; } },
       take: id => { if (t.inv[id]) { delete t.inv[id]; changed = true; } },
-      set: (f, txt) => { if (!t.flags[f]) { t.flags[f] = { by: m.name, at: B.now() }; changed = true; if (txt) events.push(txt); } },
-      escape: () => { if (!t.escapedAt) { t.flags.escaped = { by: m.name, at: B.now() }; t.escapedAt = Math.max(1, B.now() - g.startedAt); changed = true; escaped = true; events.push('opened the exit door. The team escaped!'); } },
+      set: (f, txt) => { if (!t.flags[f]) { t.flags[f] = { by: m.name, pid, at: B.now() }; changed = true; if (txt) events.push(txt); } },
+      escape: () => { if (!t.escapedAt) { t.flags.escaped = { by: m.name, pid, at: B.now() }; t.escapedAt = Math.max(1, B.now() - g.startedAt); changed = true; escaped = true; events.push('opened the exit door. The team escaped!'); } },
     };
     if (type === 'inspect') result = tg.inspect(h);
     else if (type === 'use') {
@@ -627,7 +669,7 @@ async function getHint(trailId) {
     if (!step) { res = 'Nothing left to hint here.'; return undefined; }
     if (t.hints[step]) { res = room.hints[step]; return undefined; }
     if (Object.keys(t.hints).length >= maxHints(k)) { res = 'Your team has used all its hints.'; return undefined; }
-    t.hints[step] = { by: m.name, at: B.now() }; res = room.hints[step]; fresh = true;
+    t.hints[step] = { by: m.name, pid, at: B.now() }; res = room.hints[step]; fresh = true;
     return t;
   });
   if (fresh) B.push('feed/' + k, { t: B.now(), who: m.name, text: 'used a hint: "' + res + '"', kind: 'event' });
