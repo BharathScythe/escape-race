@@ -247,8 +247,8 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 </div>
 
 <!-- Bump ?v= after editing config.js or puzzles.js so players' browsers fetch the new copy. -->
-<script src="config.js?v=4"></script>
-<script src="puzzles.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script src="puzzles.js?v=5"></script>
 <script>
 (function () {
 'use strict';
@@ -261,14 +261,18 @@ const TEAMS = {
   C: { name: 'Everyone', room: null, color: 'var(--office)' },          // co-op: room is the host's pick
 };
 // Every game the host can choose, in menu order. 'race' is the two-team game.
+// The race and the small Office/Lab games still work; add them back here to offer them again:
+//   { id: 'race', label: 'Team race · Manager\'s Office vs Secret Lab' },
+//   { id: 'coop:office', label: 'The Manager\'s Office · small' }, { id: 'coop:lab', label: 'The Secret Lab · small' },
 const GAMES = [
-  { id: 'coop:mansion', label: 'The Haunted Mansion · everyone together' },
-  { id: 'coop:building', label: 'The Locked Building · everyone together' },
-  { id: 'race', label: 'Team race · Manager\'s Office vs Secret Lab' },
-  { id: 'coop:office', label: 'The Manager\'s Office · everyone together (small)' },
-  { id: 'coop:lab', label: 'The Secret Lab · everyone together (small)' },
+  { id: 'coop:mansion', label: 'The Haunted Mansion · Normal (4 trails)' },
+  { id: 'coop:mansion_hard', label: 'The Haunted Mansion · Hard (5 trails)' },
+  { id: 'coop:building', label: 'The Locked Building · Normal (4 trails)' },
+  { id: 'coop:building_hard', label: 'The Locked Building · Hard (5 trails)' },
 ];
-const COOP_ROOMS = ['mansion', 'building', 'office', 'lab'];
+const COOP_ROOMS = ['mansion', 'mansion_hard', 'building', 'building_hard', 'office', 'lab'];
+const isBuilding = r => String(r).startsWith('building');
+const isHardRoom = r => String(r).endsWith('_hard');
 const mode = () => {
   const m = DB.game && DB.game.mode;
   return m === 'race' || m === 'coop' ? m : (window.GAME_MODE === 'race' ? 'race' : 'coop');
@@ -282,7 +286,7 @@ const roomOf = k => {
 };
 const currentGame = () => mode() === 'race' ? 'race' : 'coop:' + roomOf('C');
 const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker',
-  piano: 'piano', cauldron: 'cauldron', trunk: 'trunk' };
+  piano: 'piano', cauldron: 'cauldron', trunk: 'trunk', diary: 'diary clasp', ouija: 'spirit board', reader: 'badge reader' };
 const maxHints = k => PZ[roomOf(k)].maxHints || 3;
 // The rule: the exit takes no password until every clue is found. In a room with trails
 // that means each trail's final step (the notes); other rooms list theirs in exitNeeds.
@@ -676,15 +680,33 @@ async function act(type, target, item, value) {
       else if (tg.use && tg.use[item]) result = tg.use[item](h);
       else result = { msg: `The ${room.items[item].name.toLowerCase()} does nothing here.` };
     } else if (type === 'code') {
-      if (!tg.code.open(h)) result = tg.inspect(h);
-      else if (codeOk) result = tg.code.solve(h);
-      else result = { msg: `${tried || 'That'} is not the code.`, wrong: true };
+      // Hard games: three wrong codes on a lock jam it for 30 seconds, for the whole team.
+      const jam = room.hard && t.jams && t.jams[target];
+      if (jam && jam > B.now()) { const sec = Math.ceil((jam - B.now()) / 1000); result = { msg: `The lock is jammed. Try again in ${sec} second${sec === 1 ? '' : 's'}.`, wrong: true, jammed: true }; }
+      else if (!tg.code.open(h)) result = tg.inspect(h);
+      else if (codeOk) {
+        result = tg.code.solve(h);
+        if (room.hard && t.wrongs && t.wrongs[target]) { delete t.wrongs[target]; changed = true; }
+      } else {
+        result = { msg: `${tried || 'That'} is not the code.`, wrong: true };
+        if (room.hard) {
+          t.wrongs = t.wrongs || {}; const n = (t.wrongs[target] || 0) + 1;
+          if (n >= 3) {
+            t.jams = t.jams || {}; t.jams[target] = B.now() + 30000; delete t.wrongs[target];
+            result.msg += ' The lock jams! It won\'t turn for 30 seconds.'; result.jamNow = true;
+          } else {
+            t.wrongs[target] = n;
+            result.msg += ` ${3 - n} more wrong ${3 - n === 1 ? 'try' : 'tries'} and it jams.`;
+          }
+          changed = true;
+        }
+      }
     }
     return changed ? t : undefined;
   });
   if (typeof result === 'string') result = { msg: result };
   result = result || { msg: '' };
-  if (type === 'code' && result.wrong && tried) events.push(`tried ${tried} on the ${LABELS[target] || target}. Wrong.`);
+  if (type === 'code' && result.wrong && !result.jammed && tried) events.push(`tried ${tried} on the ${LABELS[target] || target}. Wrong.${result.jamNow ? ' It jammed for 30 seconds!' : ''}`);
   for (const text of events) B.push('feed/' + k, { t: B.now(), who: m.name, text, kind: 'event' });
   if (escaped) await B.tx('game/winner', cur => (cur ? undefined : k));
   if (type === 'use') selected = null;
@@ -851,15 +873,17 @@ const SCENES = {
         ${hot('clock', `<circle cx="190" cy="140" r="44" fill="#3a2a1d"/><circle cx="190" cy="140" r="39" fill="#f4efe2"/>${ticks}
           <line x1="190" y1="140" x2="${hx}" y2="${hy}" stroke="#1b1410" stroke-width="5" stroke-linecap="round"/>
           <line x1="190" y1="140" x2="${mx}" y2="${my}" stroke="#1b1410" stroke-width="3" stroke-linecap="round"/><circle cx="190" cy="140" r="4" fill="#b8392f"/>`, 'Wall clock')}
-        ${room === 'building' ? hot('certificate', f.safe
+        ${isBuilding(room) ? hot('certificate', f.safe
           ? `<rect x="600" y="110" width="110" height="80" fill="#3d434d"/><rect x="612" y="120" width="86" height="60" fill="#22262c"/><circle cx="655" cy="150" r="12" fill="#8a8f98"/><polygon points="600,110 560,124 560,204 600,190" fill="#e9e2cf" stroke="#4a3527" stroke-width="5"/>`
           : `<rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><text x="655" y="134" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="10" fill="#6d5f49">EMPLOYEE OF</text><text x="655" y="148" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="10" fill="#6d5f49">THE MONTH</text><circle cx="655" cy="170" r="9" fill="#d9a73e"/>`, 'Framed certificate')
         : `<rect x="600" y="110" width="110" height="80" fill="#e9e2cf" stroke="#4a3527" stroke-width="6"/><path d="M620 135h70M620 150h70M620 165h40" stroke="#9a8e74" stroke-width="3"/>`}
         <ellipse cx="405" cy="410" rx="170" ry="26" fill="#8e3b2e" opacity=".85"/>`;
     },
-    // 1 desk
-    f => officeBase() + `
-      <rect x="560" y="70" width="140" height="100" fill="#efe7d4" stroke="#4a3527" stroke-width="5"/><path d="M575 95h110M575 112h110M575 129h80" stroke="#b0a58c" stroke-width="3"/><text x="630" y="160" text-anchor="middle" font-size="12" fill="#6d5f49" font-family="Figtree, sans-serif">Q3 TARGETS</text>
+    // 1 desk (Hard: the Q3 poster shows the financial year, and a badge hides under the lamp)
+    (f, room) => officeBase() + `
+      ${(() => { const poster = `<rect x="560" y="70" width="140" height="100" fill="#efe7d4" stroke="#4a3527" stroke-width="5"/><path d="M575 95h110M575 112h110M575 129h80" stroke="#b0a58c" stroke-width="3"/><text x="630" y="160" text-anchor="middle" font-size="12" fill="#6d5f49" font-family="Figtree, sans-serif">Q3 TARGETS</text>`;
+        return isHardRoom(room) ? hot('targets', poster + '<text x="688" y="84" text-anchor="end" font-size="9" fill="#6d5f49" font-family="JetBrains Mono, monospace">FY 2031</text>', 'Q3 TARGETS poster') : poster; })()}
+      ${isHardRoom(room) ? hot('lamp', `<rect x="150" y="236" width="70" height="16" fill="transparent"/>${f.badge ? '' : '<rect x="200" y="244" width="22" height="9" fill="#e86f8a" transform="rotate(-8 211 248)"/>'}`, 'Desk lamp base') : ''}
       <rect x="150" y="252" width="500" height="20" fill="#5a3b25"/><rect x="165" y="272" width="16" height="88" fill="#4a3020"/>
       ${hot('computer', `<rect x="230" y="140" width="170" height="104" rx="6" fill="#23262d"/><rect x="240" y="150" width="150" height="84" fill="${f.pc ? '#2f6db3' : '#0e1015'}"/>
         ${f.pc ? '<rect x="252" y="162" width="70" height="40" fill="#f3ef9a"/><path d="M258 175h56M258 185h50M258 195h40" stroke="#8c8740" stroke-width="2"/>' : '<text x="315" y="198" text-anchor="middle" fill="#6f7686" font-family="JetBrains Mono, monospace" font-size="13">PASSWORD?</text>'}
@@ -870,8 +894,8 @@ const SCENES = {
         <rect x="${f.drawer ? 462 : 478}" y="${f.drawer ? 276 : 280}" width="${f.drawer ? 186 : 154}" height="${f.drawer ? 40 : 34}" fill="${f.drawer ? '#80573b' : '#7b5236'}" stroke="#4a3020" stroke-width="3"/>
         <circle cx="555" cy="${f.drawer ? 296 : 297}" r="4" fill="#d9b24a"/>${f.drawer ? '' : '<rect x="553" y="304" width="4" height="6" fill="#2a1b10"/>'}
         <rect x="478" y="320" width="154" height="34" fill="#7b5236" stroke="#4a3020" stroke-width="3"/><circle cx="555" cy="337" r="4" fill="#d9b24a"/>`, 'Desk drawer')}`,
-    // 2 painting + bookshelf
-    f => {
+    // 2 painting + bookshelf (Hard: the UV letters are mirrored)
+    (f, room) => {
       let books = '';
       BOOKS.forEach((row, r) => {
         let x = 452; const yb = 168 + r * 82;
@@ -883,7 +907,7 @@ const SCENES = {
           <rect x="82" y="190" width="266" height="80" fill="#335a74"/><path d="M82 205h266M82 225h266M82 245h266" stroke="#46708c" stroke-width="3"/>
           <path d="M140 200l20-40v40zM150 200h40l-6 10h-30z" fill="#2d2420"/>
           <circle cx="120" cy="130" r="12" fill="#b9623e" opacity=".8"/><circle cx="200" cy="125" r="10" fill="#b9623e" opacity=".8"/><circle cx="300" cy="135" r="13" fill="#b9623e" opacity=".8"/>
-          ${f.uv ? '<rect x="82" y="104" width="266" height="86" fill="#2a0f4a" opacity=".55"/><text x="215" y="160" text-anchor="middle" fill="#e6c4ff" filter="url(#glow)" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="46" letter-spacing="14">MAPLE</text>' : ''}`, 'Painting')}
+          ${f.uv ? '<rect x="82" y="104" width="266" height="86" fill="#2a0f4a" opacity=".55"/><text x="215" y="160" text-anchor="middle" fill="#e6c4ff" filter="url(#glow)" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="46" letter-spacing="14">' + (isHardRoom(room) ? 'ELPAM' : 'MAPLE') + '</text>' : ''}`, 'Painting')}
         ${hot('shelf', `<rect x="430" y="70" width="300" height="290" fill="#5a3b25"/><rect x="442" y="82" width="276" height="270" fill="#3f2919"/>
           <rect x="442" y="168" width="276" height="10" fill="#5a3b25"/><rect x="442" y="250" width="276" height="10" fill="#5a3b25"/><rect x="442" y="332" width="276" height="10" fill="#5a3b25"/>${books}`, 'Bookshelf')}`;
     },
@@ -892,7 +916,7 @@ const SCENES = {
       ${hot('window', `<rect x="80" y="70" width="230" height="170" fill="#e7dcc6"/><rect x="92" y="82" width="206" height="146" fill="#9cc6df"/>
         <rect x="110" y="150" width="30" height="78" fill="#6d8aa0"/><rect x="150" y="120" width="38" height="108" fill="#5b7a91"/><rect x="200" y="160" width="26" height="68" fill="#6d8aa0"/><rect x="236" y="135" width="44" height="93" fill="#5b7a91"/>
         <path d="M195 82v146M92 155h206" stroke="#e7dcc6" stroke-width="8"/>
-        ${room === 'building' ? '<rect x="226" y="92" width="40" height="38" fill="#f3e46a" transform="rotate(6 246 111)"/><path d="M232 104h28M232 112h24M232 120h20" stroke="#8c8740" stroke-width="2" transform="rotate(6 246 111)"/>' : ''}`, 'Window')}
+        ${isBuilding(room) ? '<rect x="226" y="92" width="40" height="38" fill="#f3e46a" transform="rotate(6 246 111)"/><path d="M232 104h28M232 112h24M232 120h20" stroke="#8c8740" stroke-width="2" transform="rotate(6 246 111)"/>' : ''}`, 'Window')}
       ${hot('plant', `<path d="M180 300q-40-60-10-120M190 300q10-80 50-110M185 300q-60-30-80-80M195 300q50-30 70-70M188 300q0-70-10-140" stroke="#2f6b3a" stroke-width="10" fill="none" stroke-linecap="round"/>
         <ellipse cx="170" cy="180" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="240" cy="192" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="105" cy="222" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="265" cy="232" rx="16" ry="8" fill="#3c8c4c"/><ellipse cx="178" cy="160" rx="14" ry="7" fill="#3c8c4c"/>
         <polygon points="140,300 240,300 228,372 152,372" fill="#b5653e"/><rect x="134" y="292" width="112" height="14" fill="#c97448"/>`, 'Plant pot')}
@@ -931,7 +955,7 @@ const SCENES = {
         <path d="M440 262l14-50v-30h16v30l14 50z" fill="#c9eef0" opacity=".7"/><path d="M445 262l9-30h32l9 30z" fill="#9b6fd1" opacity=".75"/>` + labDark(f);
     },
     // 2 periodic poster + fridge
-    f => {
+    (f, room) => {
       const els = [['H', 1, 0, 0], ['He', 2, 0, 7], ['Li', 3, 1, 0], ['Be', 4, 1, 1], ['B', 5, 1, 2], ['C', 6, 1, 3], ['N', 7, 1, 4], ['O', 8, 1, 5], ['F', 9, 1, 6], ['Ne', 10, 1, 7]];
       return labBase(f) + `
         ${hot('poster', `<rect x="60" y="70" width="380" height="210" fill="#f3f1e8" stroke="#8d9a9c" stroke-width="4"/><text x="250" y="100" text-anchor="middle" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="22" fill="#2c3440">PERIODIC TABLE</text>
@@ -941,13 +965,14 @@ const SCENES = {
           <rect x="600" y="300" width="64" height="48" rx="4" fill="#2c2f36"/><rect x="606" y="305" width="52" height="11" fill="${f.fridge ? '#73d38a' : (f.power ? '#5c2a2a' : '#222')}"/>
           ${[0, 1].map(r => [0, 1, 2, 3, 4].map(c => `<rect x="${606 + c * 10.5}" y="${321 + r * 12}" width="8" height="9" fill="#c9ccd3"/>`).join('')).join('')}
           <rect x="${f.fridge ? 486 : 512}" y="300" width="${f.fridge ? 14 : 4}" height="40" fill="#9aa6a8"/>
-          <text x="590" y="285" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">SAMPLES · 4 °C</text>`, 'Sample fridge')}` + labDark(f);
+          <text x="590" y="285" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="11" fill="#2c3440">SAMPLES · 4 °C</text>`, 'Sample fridge')}
+        ${isHardRoom(room) ? hot('reader', `<rect x="700" y="150" width="46" height="70" rx="5" fill="#2c2f36"/><rect x="707" y="158" width="32" height="12" fill="${f.reader ? '#73d38a' : '#5c2a2a'}"/>${[0, 1, 2].map(r => [0, 1, 2].map(c => `<rect x="${708 + c * 11}" y="${176 + r * 11}" width="8" height="8" fill="#c9ccd3"/>`).join('')).join('')}<path d="M723 220v40h-40" stroke="#555" stroke-width="3" fill="none"/>`, 'Badge reader') : ''}` + labDark(f);
     },
     // 3 whiteboard, coat, fuse box
     (f, room) => labBase(f) + `
       ${hot('whiteboard', `<rect x="60" y="76" width="350" height="200" fill="#f8faf9" stroke="#8d9a9c" stroke-width="6"/><rect x="60" y="276" width="350" height="10" fill="#8d9a9c"/>
         <rect x="140" y="270" width="30" height="8" fill="#2c5ea8"/><rect x="180" y="270" width="30" height="8" fill="#c8352b"/>
-        ${f.board ? `<text x="235" y="180" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="44" fill="#3c9c50" opacity=".8" filter="url(#glow)">Ne + O + N</text><text x="235" y="225" text-anchor="middle" font-family="Figtree, sans-serif" font-size="20" fill="#3c9c50" opacity=".8">= ${room === 'building' ? 'locker code' : 'the way out'}</text>`
+        ${f.board ? `<text x="235" y="180" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="44" fill="#3c9c50" opacity=".8" filter="url(#glow)">${isHardRoom(room) ? '10 · 8 · 7' : 'Ne + O + N'}</text><text x="235" y="225" text-anchor="middle" font-family="Figtree, sans-serif" font-size="20" fill="#3c9c50" opacity=".8">= ${isBuilding(room) ? 'locker code' : 'the way out'}</text>`
           : '<path d="M110 150q60-20 120 5t130-5M120 200q80 15 200-10" stroke="#d6dcdb" stroke-width="16" fill="none" stroke-linecap="round"/>'}`, 'Whiteboard')}
       ${hot('coat', `<rect x="470" y="96" width="70" height="10" fill="#6d7a7c"/><path d="M505 106v12" stroke="#6d7a7c" stroke-width="4"/>
         <path d="M480 128l25-10 25 10 10 150h-70z" fill="#f4f4f0" stroke="#c9ccd3" stroke-width="2"/><path d="M505 118v160" stroke="#c9ccd3" stroke-width="2"/>
@@ -977,9 +1002,10 @@ function labLockerWall(f) {
       <path d="M645 184v${f.magnet ? 0 : 40}" stroke="#ddd" stroke-width="2"/>${f.magnet ? '' : '<rect x="637" y="222" width="16" height="12" fill="#c8352b"/><rect x="637" y="222" width="5" height="12" fill="#ccc"/><rect x="648" y="222" width="5" height="12" fill="#ccc"/>'}`, 'Eye-wash station sign')}` + labDark(f);
 }
 SCENES.building = [SCENES.office[0], SCENES.office[1], SCENES.office[2], SCENES.office[3], labLockerWall, SCENES.lab[1], SCENES.lab[2], SCENES.lab[3]];
+SCENES.building_hard = SCENES.building;   // the same walls; each wall draws its Hard extras from the room
 
 Object.assign(ICONS, {
-  labcard: ICONS.memo, safenote: ICONS.memo, printout: ICONS.memo,
+  labcard: ICONS.memo, safenote: ICONS.memo, printout: ICONS.memo, note5: ICONS.memo,
   receipt: '<svg viewBox="0 0 40 40"><path d="M11 5h18v30l-3-2-3 2-3-2-3 2-3-2-3 2z" fill="#f1ead7"/><path d="M14 12h12M14 17h12M14 22h8" stroke="#8a8170" stroke-width="2"/></svg>',
   magnet: '<svg viewBox="0 0 40 40"><path d="M20 3v12" stroke="#ccc" stroke-width="2"/><path d="M11 15h7v10a2 2 0 0 0 4 0V15h7v10a9 9 0 0 1-18 0z" fill="#c8352b"/><rect x="11" y="15" width="7" height="5" fill="#ccc"/><rect x="22" y="15" width="7" height="5" fill="#ccc"/></svg>',
   usb: '<svg viewBox="0 0 40 40"><rect x="10" y="14" width="18" height="12" rx="2" fill="#2c5ea8"/><rect x="28" y="16" width="7" height="8" fill="#c9ccd3"/><circle cx="16" cy="20" r="2" fill="#bfe6f2"/></svg>',
@@ -990,10 +1016,11 @@ const MSYM = { // the four symbols, drawn centred on 0,0
   raven: '<path d="M-12 6q2-12 14-12l5-5 2 5 6 1-6 3q-2 10-14 10z" fill="currentColor"/><circle cx="4" cy="-4" r="1.4" fill="#000"/>',
   candle: '<rect x="-4" y="-2" width="8" height="14" fill="currentColor"/><path d="M0-12q5 6 0 9q-5-3 0-9z" fill="#ffcc66"/>',
   moon: '<path d="M3-11a11 11 0 1 0 0 22a8 8 0 1 1 0-22z" fill="currentColor"/>',
+  hourglass: '<path d="M-8-12h16M-8 12h16M-6-12q0 9 6 12q-6 3-6 12M6-12q0 9-6 12q6 3 6 12" stroke="currentColor" stroke-width="2.5" fill="none"/><path d="M-3 8l3-4 3 4z" fill="currentColor"/>',
   key: '<circle cx="-6" cy="0" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M-1 0h13M8 0v5M12 0v4" stroke="currentColor" stroke-width="3" fill="none"/>',
 };
 const sym = (name, x, y, color, s) => `<g transform="translate(${x} ${y}) scale(${s || 1})" style="color:${color}">${MSYM[name]}</g>`;
-const mansionNotes = f => PZ.mansion.trails.filter(tr => f[tr.steps[tr.steps.length - 1]]).length;
+const mansionNotes = (f, room) => PZ[room || 'mansion'].trails.filter(tr => f[tr.steps[tr.steps.length - 1]]).length;
 
 function mansionBase(opts) {
   opts = opts || {};
@@ -1012,39 +1039,44 @@ const darkness = (lit, label) => lit ? '' : `<g pointer-events="none"><rect widt
 
 SCENES.mansion = [
   // 0 hall: front door (sealed with chains until all four notes are found) + grandfather clock
-  f => {
-    const all = mansionNotes(f) === 4;
-    const wheels = f.escaped ? 'ROSE' : '????';
+  (f, room) => {
+    const all = mansionNotes(f, room) === PZ[room].trails.length;
+    const hard = isHardRoom(room); const n = hard ? 5 : 4;
+    const wheels = f.escaped ? (hard ? 'EDITH' : 'ROSE') : '?'.repeat(n);
+    const syms = hard ? ['raven', 'candle', 'moon', 'key', 'hourglass'] : ['raven', 'candle', 'moon', 'key'];
+    const sx = hard ? 336 : 343, sstep = hard ? 32 : 38, wx = hard ? 318 : 331, wstep = hard ? 33 : 37, ww = hard ? 26 : 28;
     return mansionBase() + `
       ${hot('door', `<path d="M290 360V120q110-90 220 0v240z" fill="#2a1a12"/>
         ${f.escaped ? '<path d="M305 360V126q95-76 190 0v234z" fill="#0d1424"/><circle cx="440" cy="150" r="14" fill="#f1ead0"/><path d="M305 360V126l-40 20v214z" fill="#4a2f20"/>'
           : `<path d="M305 360V126q95-76 190 0v234z" fill="#4a2f20"/><path d="M400 70v290" stroke="#2a1a12" stroke-width="5"/>
              ${[0, 1].map(s => `<rect x="${322 + s * 95}" y="150" width="60" height="80" fill="none" stroke="#2f1e15" stroke-width="5"/><rect x="${322 + s * 95}" y="250" width="60" height="90" fill="none" stroke="#2f1e15" stroke-width="5"/>`).join('')}`}
-        ${['raven', 'candle', 'moon', 'key'].map((s, i) => sym(s, 343 + i * 38, 118, '#d9c9a3', .9)).join('')}
-        <rect x="324" y="232" width="152" height="40" rx="5" fill="#1a110c"/>
-        ${wheels.split('').map((c, i) => `<rect x="${331 + i * 37}" y="238" width="28" height="28" fill="#d9c9a3"/><text x="${345 + i * 37}" y="259" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="18" fill="#1a110c">${c}</text>`).join('')}
+        ${syms.map((s, i) => sym(s, sx + i * sstep, 118, '#d9c9a3', .9)).join('')}
+        <rect x="${wx - 7}" y="232" width="${n * wstep + 8}" height="40" rx="5" fill="#1a110c"/>
+        ${wheels.split('').map((c, i) => `<rect x="${wx + i * wstep}" y="238" width="${ww}" height="28" fill="#d9c9a3"/><text x="${wx + ww / 2 + i * wstep}" y="259" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="18" fill="#1a110c">${c}</text>`).join('')}
         ${all || f.escaped ? '' : `<path d="M300 140L500 340M500 140L300 340" stroke="#8a8f98" stroke-width="9" stroke-dasharray="14 6"/><rect x="384" y="226" width="32" height="28" rx="4" fill="#6d7179" transform="rotate(8 400 240)"/>
-          <text x="400" y="385" text-anchor="middle" fill="#c9b8db" font-family="Figtree, sans-serif" font-size="13">Sealed · ${mansionNotes(f)} of 4 ghost notes found</text>`}`, 'Front door')}
+          <text x="400" y="385" text-anchor="middle" fill="#c9b8db" font-family="Figtree, sans-serif" font-size="13">Sealed · ${mansionNotes(f, room)} of ${PZ[room].trails.length} ghost notes found</text>`}`, 'Front door')}
       ${hot('clock', `<rect x="610" y="90" width="80" height="270" fill="#3d2618"/><rect x="600" y="80" width="100" height="22" fill="#2e1c12"/>
         <circle cx="650" cy="140" r="28" fill="#e6dcc0"/><path d="M650 140v-22M650 140v-20" stroke="#1a110c" stroke-width="3"/>
         <rect x="628" y="190" width="44" height="130" fill="#24160e"/><circle cx="650" cy="290" r="12" fill="#c9a24a"/><path d="M650 200v78" stroke="#c9a24a" stroke-width="2"/>`, 'Grandfather clock')}
+      ${hard ? hot('mirror', `<ellipse cx="150" cy="150" rx="62" ry="80" fill="#a9822f"/><ellipse cx="150" cy="150" rx="52" ry="70" fill="${f.mirror ? '#6f7f8a' : '#4a555c'}"/><ellipse cx="150" cy="150" rx="52" ry="70" fill="#cfd6da" opacity="${f.mirror ? .15 : .35}"/>${f.mirror ? '<text x="150" y="140" text-anchor="middle" font-family="Figtree, sans-serif" font-size="11" fill="#eef" opacity=".8">wind the clock</text><text x="150" y="158" text-anchor="middle" font-family="Figtree, sans-serif" font-size="11" fill="#eef" opacity=".8">to midnight…</text>' : ''}`, 'Hall mirror') : ''}
       <rect x="110" y="270" width="50" height="90" fill="#2a1d14"/><path d="M118 270l-10-90M135 270l4-100M150 270l14-80" stroke="#1c140f" stroke-width="5"/>
       ${cobweb(0, 0)}${cobweb(800, 0, true)}`;
   },
   // 1 hall: portrait gallery
-  f => {
+  (f, room) => {
     const person = (x, y, dress, hair, small) => `<rect x="${x}" y="${y}" width="130" height="170" fill="#1e1520"/>
       <path d="M${x + 25} ${y + 170}q40-${small ? 50 : 70} 80 0z" fill="${dress}"/><ellipse cx="${x + 65}" cy="${y + (small ? 85 : 72)}" rx="${small ? 20 : 24}" ry="${small ? 25 : 30}" fill="#d8bfa3"/>
       <path d="M${x + 40} ${y + (small ? 80 : 64)}q25-${small ? 40 : 45} 50 0" fill="${hair}"/><circle cx="${x + 57}" cy="${y + (small ? 86 : 74)}" r="2.5" fill="#222"/><circle cx="${x + 73}" cy="${y + (small ? 86 : 74)}" r="2.5" fill="#222"/>`;
     const frame = (x, y) => `<rect x="${x - 12}" y="${y - 12}" width="154" height="194" fill="#a9822f"/><rect x="${x - 5}" y="${y - 5}" width="140" height="180" fill="#6e521c"/>`;
-    const plaque = (x, txt) => `<rect x="${x}" y="300" width="130" height="30" fill="#a9822f"/><text x="${x + 65}" y="319" text-anchor="middle" font-family="Figtree, sans-serif" font-size="10.5" font-weight="700" fill="#2a1d0c">${txt}</text>`;
+    const plaque = (x, txt, txt2) => `<rect x="${x - 6}" y="300" width="142" height="${txt2 ? 40 : 30}" fill="#a9822f"/><text x="${x + 65}" y="319" text-anchor="middle" font-family="Figtree, sans-serif" font-size="10" font-weight="700" fill="#2a1d0c">${txt}</text>${txt2 ? `<text x="${x + 65}" y="333" text-anchor="middle" font-family="Figtree, sans-serif" font-size="9" font-style="italic" fill="#2a1d0c">${txt2}</text>` : ''}`;
+    const hard = isHardRoom(room);
     return mansionBase() + `
-      ${hot('portraits', frame(70, 90) + person(70, 90, '#2b3b55', '#3a2a1a') + plaque(70, 'LORD ASHWORTH') + frame(300, 90) + person(300, 90, '#5a2340', '#6a4a2a') + plaque(300, 'LADY ASHWORTH'), 'Portraits of Lord and Lady Ashworth')}
+      ${hot('portraits', frame(70, 90) + person(70, 90, '#2b3b55', '#3a2a1a') + plaque(70, hard ? 'LORD HENRY ASHWORTH' : 'LORD ASHWORTH') + frame(300, 90) + person(300, 90, '#5a2340', '#6a4a2a') + plaque(300, hard ? 'LADY MARGARET ASHWORTH' : 'LADY ASHWORTH'), 'Portraits of Lord and Lady Ashworth')}
       ${hot('portrait', `<g ${f.sheet ? 'transform="rotate(5 595 175)"' : ''}>${frame(530, 90)}${person(530, 90, '#e7e2f0', '#c98a3c', true)}</g>
-        ${f.sheet ? '<rect x="540" y="96" width="14" height="168" fill="#120c14" opacity=".6"/>' : ''}${plaque(530, 'ROSE ASHWORTH 1885–1897')}`, 'Portrait of Rose Ashworth')}`;
+        ${f.sheet ? '<rect x="540" y="96" width="14" height="168" fill="#120c14" opacity=".6"/>' : ''}${plaque(530, 'ROSE ASHWORTH 1885–1897', hard ? 'forever among the violets' : '')}`, 'Portrait of Rose Ashworth')}`;
   },
   // 2 library: bookshelf + reading desk with candelabra and diary
-  f => {
+  (f, room) => {
     let books = ''; const cols = ['#5a2a2a', '#2a3a5a', '#3a4a2a', '#4a3a2a', '#2a2a2a', '#5a4a2a'];
     [0, 1, 2].forEach(r => { let x = 72; for (let i = 0; i < 11; i++) { const w = 20 + ((i * 7 + r * 5) % 4) * 3; const h = 62 + ((i * 3 + r) % 4) * 5; if (!(r === 1 && i === 5)) books += `<rect x="${x}" y="${150 + r * 85 - h}" width="${w}" height="${h}" fill="${cols[(i + r) % 6]}"/>`; else books += `<rect x="${x}" y="${150 + r * 85 - h}" width="${w}" height="${h}" fill="#120a08"/>`; x += w + 3; } });
     const lit = !!f.candles;
@@ -1061,7 +1093,7 @@ SCENES.mansion = [
       ${lit ? '' : '<rect x="440" y="150" width="340" height="140" fill="#020104" opacity=".45" pointer-events="none"/>'}`;
   },
   // 3 library: fireplace with the iron box, raven painting above
-  f => mansionBase() + `
+  (f, room) => mansionBase() + `
     <rect x="300" y="40" width="200" height="130" fill="#a9822f"/><rect x="310" y="50" width="180" height="110" fill="#2b3040"/>
     ${sym('raven', 400, 108, '#0d0d10', 3.2)}<circle cx="455" cy="75" r="10" fill="#e9e2c8" opacity=".8"/>
     <rect x="230" y="180" width="340" height="22" fill="#5d5550"/>
@@ -1073,7 +1105,7 @@ SCENES.mansion = [
       : '<rect x="360" y="306" width="80" height="44" fill="#3b3e44"/><rect x="360" y="306" width="80" height="8" fill="#4b4f56"/><rect x="394" y="322" width="12" height="12" fill="#c9ccd3"/><circle cx="400" cy="328" r="2" fill="#222"/>', 'Iron box in the grate')}
     <path d="M610 360v-90q0-40 50-40t50 40v90z" fill="#4a1f2a"/><rect x="600" y="300" width="120" height="30" fill="#5a2a35"/>`,
   // 4 parlour: piano and moonlit window
-  f => mansionBase() + `
+  (f, room) => mansionBase() + `
     <rect x="40" y="60" width="140" height="180" fill="#0c1428"/><circle cx="130" cy="110" r="22" fill="#e9e2c8"/><circle cx="140" cy="104" r="20" fill="#0c1428"/>
     <path d="M110 60v180M40 150h140" stroke="#2a1a12" stroke-width="6"/><path d="M30 50q30 100 0 210h25q15-110-5-210z" fill="#5a1f2a"/><path d="M190 50q-30 100 0 210h-25q-15-110 5-210z" fill="#5a1f2a"/>
     ${hot('piano', `<rect x="240" y="150" width="340" height="210" fill="#140e0c"/><rect x="240" y="150" width="340" height="16" fill="#2a1d18"/>
@@ -1082,21 +1114,24 @@ SCENES.mansion = [
       <rect x="250" y="274" width="320" height="86" fill="#1c1412"/><rect x="330" y="186" width="160" height="50" fill="#2a1d18"/>
       ${f.melody ? '<rect x="345" y="170" width="130" height="60" fill="#efe6d2"/><text x="410" y="196" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#2a1d0c">3:A 1:B</text><text x="410" y="216" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#2a1d0c">4:D 2:E</text>' : ''}
       ${f.piano ? '<polygon points="240,150 580,150 560,110 260,110" fill="#2a1d18"/>' : ''}`, 'Piano')}
-    <ellipse cx="410" cy="410" rx="220" ry="26" fill="#3a1a2a"/>${cobweb(800, 0, true)}`,
+    <ellipse cx="410" cy="410" rx="220" ry="26" fill="#3a1a2a"/>${cobweb(800, 0, true)}
+    ${isHardRoom(room) ? `<rect x="610" y="290" width="160" height="12" fill="#3a2414"/><rect x="620" y="302" width="10" height="58" fill="#3a2414"/><rect x="750" y="302" width="10" height="58" fill="#3a2414"/>
+      ${hot('ouija', `<rect x="640" y="272" width="110" height="20" rx="4" fill="#c9a873"/><path d="M652 286q43-16 86 0" stroke="#3a2414" stroke-width="1.5" fill="none"/><text x="695" y="284" text-anchor="middle" font-family="serif" font-size="6" fill="#3a2414">A B C D E F G H I J K L M</text>${f.ouija ? '<path d="M690 270l8-8 8 8-8 4z" fill="#7a5a32"/>' : ''}`, 'Spirit board')}
+      ${hot('vase', `<path d="M620 290q-8-26 4-40h20q12 14 4 40z" fill="#3d5a6a"/><path d="M628 250l-8-30M636 250l2-36M642 250l10-28" stroke="#7a6a4a" stroke-width="2"/><circle cx="620" cy="218" r="5" fill="#8a6a8a"/><circle cx="638" cy="212" r="5" fill="#8a6a8a"/><circle cx="652" cy="220" r="5" fill="#8a6a8a"/>`, 'Vase of dried flowers')}` : ''}`,
   // 5 kitchen: stove with cauldron, cookbook shelf, lantern hook
-  f => mansionBase({ wall: '#3a3328', pat: '#463e30', plain: false }) + `
+  (f, room) => mansionBase({ wall: '#3a3328', pat: '#463e30', plain: false }) + `
     <rect x="50" y="120" width="260" height="12" fill="#4a2c18"/>
     ${[70, 100, 130].map((x, i) => `<rect x="${x}" y="${84 - i * 4}" width="22" height="${36 + i * 4}" rx="3" fill="${['#6a8a5a', '#8a5a3a', '#5a6a8a'][i]}"/>`).join('')}
     ${hot('cookbook', '<rect x="200" y="72" width="26" height="48" fill="#7a2a1a"/><rect x="228" y="78" width="22" height="42" fill="#3a4a2a"/><rect x="204" y="86" width="18" height="4" fill="#d9c9a3"/>', 'Cookbook')}
     <rect x="360" y="230" width="280" height="130" fill="#1e1e22"/><rect x="350" y="222" width="300" height="12" fill="#2c2c32"/>
-    <rect x="390" y="270" width="90" height="70" fill="#121214"/><rect x="520" y="270" width="90" height="70" fill="#121214"/><rect x="400" y="320" width="70" height="12" fill="${f.brew ? '#ff8a3a' : '#3a1a0a'}"/>
+    ${isHardRoom(room) ? hot('stove', `<rect x="390" y="270" width="90" height="70" fill="#121214"/><rect x="400" y="280" width="70" height="6" fill="#3a3a40"/><circle cx="470" cy="305" r="4" fill="#8a8f98"/>`, 'Oven door') : '<rect x="390" y="270" width="90" height="70" fill="#121214"/>'}<rect x="520" y="270" width="90" height="70" fill="#121214"/><rect x="400" y="320" width="70" height="12" fill="${f.brew ? '#ff8a3a' : '#3a1a0a'}"/>
     ${hot('cauldron', `<path d="M430 222q0-70 70-70t70 70z" fill="#2a2a2e"/><ellipse cx="500" cy="152" rx="70" ry="12" fill="${f.brew ? '#5ad17a' : '#1a1a1e'}"/>
       ${f.brew ? '<path d="M470 140q-10-30 10-50q20-20 0-40M520 140q10-30-10-50q-20-20 0-40" stroke="#9de0b0" stroke-width="6" fill="none" opacity=".6"/>' : ''}
       ${[['#b13030', 300], ['#3c9c50', 320], ['#2f5da8', 340]].map(([c, x]) => `<rect x="${x}" y="190" width="14" height="32" rx="3" fill="${c}"/><rect x="${x + 4}" y="182" width="6" height="8" fill="#ccc"/>`).join('')}`, 'Cauldron')}
     ${hot('lanternhook', `<path d="M700 60v30" stroke="#555" stroke-width="3"/><path d="M690 90q10-10 20 0" stroke="#555" stroke-width="3" fill="none"/>
       ${f.lantern ? '' : '<rect x="684" y="96" width="32" height="44" rx="4" fill="#a9822f"/><rect x="690" y="102" width="20" height="32" fill="#e8dcc0" opacity=".7"/><rect x="680" y="140" width="40" height="6" fill="#7a5c20"/><rect x="694" y="106" width="4" height="22" fill="#fff" opacity=".6"/>'}`, 'Lantern hook')}`,
   // 6 attic: dark until the lantern is used; trunk and rocking chair
-  f => {
+  (f, room) => {
     const lit = !!f.light;
     return mansionBase({ wall: '#3b2c22', plain: true }) + `
       <polygon points="0,0 400,0 0,200" fill="#2a1e16"/><polygon points="800,0 400,0 800,200" fill="#2a1e16"/>
@@ -1110,19 +1145,30 @@ SCENES.mansion = [
       ${cobweb(0, 0)}${cobweb(800, 0, true)}${darkness(lit, 'PITCH BLACK · BRING A LIGHT')}`;
   },
   // 7 cellar: crate with the ladle, lamp-oil barrel, wine rack
-  f => {
+  (f, room) => {
     let stones = '';
     for (let r = 0; r < 9; r++) for (let c = 0; c < 11; c++) stones += `<rect x="${c * 76 + (r % 2) * 38 - 30}" y="${r * 40}" width="72" height="36" rx="5" fill="#45403d"/>`;
     return `<defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
       <rect width="800" height="360" fill="#2a2624"/>${stones}<rect y="360" width="800" height="90" fill="#2e2a26"/><rect y="352" width="800" height="10" fill="#1c1916"/>
-      ${hot('winerack', `<rect x="40" y="120" width="220" height="240" fill="#3a2414"/>${[0, 1, 2, 3, 4].map(r => [0, 1, 2, 3].map(c => `<circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="16" fill="#1a0e10"/><circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="7" fill="#4a1a2a"/>`).join('')).join('')}`, 'Wine rack')}
+      ${hot('winerack', `<rect x="40" y="120" width="220" height="240" fill="#3a2414"/>${[0, 1, 2, 3, 4].map(r => [0, 1, 2, 3].map(c => `<circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="16" fill="#1a0e10"/><circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="7" fill="#4a1a2a"/>`).join('')).join('')}${isHardRoom(room) && !f.sheet2 ? '<circle cx="174" cy="237" r="7" fill="#e9dfc7"/>' : ''}`, 'Wine rack')}
       ${hot('crate', `<rect x="320" y="280" width="140" height="80" fill="#7a5a32"/><path d="M320 300h140M320 340h140M330 280l120 80" stroke="#5a4022" stroke-width="5"/>
-        ${f.ladle ? '' : '<path d="M440 286l40-60" stroke="#55595f" stroke-width="5"/><ellipse cx="482" cy="222" rx="10" ry="7" fill="#55595f"/>'}<path d="M325 282q20-12 40 0t40 0 40 0" stroke="#d9c07a" stroke-width="4" fill="none"/>`, 'Old crate')}
+        ${f.ladle ? '' : isHardRoom(room) ? '<rect x="316" y="272" width="148" height="12" fill="#6a4a26"/><rect x="316" y="296" width="148" height="10" fill="#6a4a26"/>' + [330, 390, 450].map(x => `<circle cx="${x}" cy="278" r="2.5" fill="#9aa0a8"/>`).join('') : '<path d="M440 286l40-60" stroke="#55595f" stroke-width="5"/><ellipse cx="482" cy="222" rx="10" ry="7" fill="#55595f"/>'}<path d="M325 282q20-12 40 0t40 0 40 0" stroke="#d9c07a" stroke-width="4" fill="none"/>`, 'Old crate')}
       ${hot('barrel', `<ellipse cx="640" cy="360" rx="80" ry="14" fill="#1c1410"/><path d="M570 360q-14-80 0-160h140q14 80 0 160z" fill="#6a4426"/><ellipse cx="640" cy="200" rx="70" ry="13" fill="#5a3a20"/>
         ${[230, 300, 345].map(y => `<path d="M565 ${y}h150" stroke="#3a3a3a" stroke-width="5"/>`).join('')}<rect x="600" y="250" width="80" height="30" fill="#d9c9a3"/><text x="640" y="270" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="12" fill="#3a2414">LAMP OIL</text>`, 'Lamp-oil barrel')}
       ${cobweb(0, 0)}${cobweb(800, 0, true)}<rect width="800" height="450" fill="#000" opacity=".25" pointer-events="none"/>`;
   },
 ];
+
+SCENES.mansion_hard = SCENES.mansion;   // the same walls; each wall draws its Hard extras from the room
+
+Object.assign(ICONS, {
+  crowbar: '<svg viewBox="0 0 40 40"><path d="M10 32L28 10q4-4 6 0" stroke="#7a8088" stroke-width="4" fill="none"/></svg>',
+  clockkey: '<svg viewBox="0 0 40 40"><path d="M8 20h14" stroke="#c9a24a" stroke-width="4"/><path d="M22 12h8v16h-8z" fill="#c9a24a"/><rect x="25" y="16" width="2" height="8" fill="#3a2414"/></svg>',
+  planchette: '<svg viewBox="0 0 40 40"><path d="M20 6q12 4 12 16q0 10-12 12q-12-2-12-12q0-12 12-16z" fill="#a9824f"/><circle cx="20" cy="18" r="5" fill="#d9eef5" stroke="#5a3a22" stroke-width="2"/></svg>',
+  sheet2: '<svg viewBox="0 0 40 40"><path d="M8 6h24v28H8l3-7-3-7 3-7z" fill="#efe6d2"/><path d="M13 13h16M13 18h16M13 23h16M13 28h16" stroke="#8a8170" stroke-width="1"/><circle cx="20" cy="18" r="2.5" fill="#222"/></svg>',
+  badge: '<svg viewBox="0 0 40 40"><rect x="9" y="8" width="22" height="28" rx="3" fill="#e86f8a"/><rect x="16" y="4" width="8" height="6" fill="#999"/><rect x="13" y="22" width="14" height="3" fill="#fff"/><rect x="13" y="27" width="10" height="3" fill="#fff"/></svg>',
+  note_hourglass: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(20 20) scale(.6)" style="color:#5a3a22">' + MSYM.hourglass + '</g></svg>',
+});
 
 Object.assign(ICONS, {
   silverkey: '<svg viewBox="0 0 40 40"><circle cx="13" cy="20" r="7" fill="none" stroke="#c9ccd3" stroke-width="4"/><path d="M20 20h15M30 20v6M35 20v5" stroke="#c9ccd3" stroke-width="4" fill="none"/></svg>',
@@ -1131,10 +1177,10 @@ Object.assign(ICONS, {
   ladle: '<svg viewBox="0 0 40 40"><path d="M10 8l14 18" stroke="#8a8f98" stroke-width="3"/><ellipse cx="27" cy="29" rx="8" ry="6" fill="#8a8f98"/></svg>',
   lantern: '<svg viewBox="0 0 40 40"><rect x="13" y="10" width="14" height="22" rx="2" fill="#3a3a40"/><rect x="16" y="14" width="8" height="14" fill="#9aa0a8" opacity=".5"/><path d="M15 10q5-7 10 0" stroke="#555" stroke-width="2" fill="none"/></svg>',
   lanternlit: '<svg viewBox="0 0 40 40"><circle cx="20" cy="21" r="14" fill="#ffd27a" opacity=".3"/><rect x="13" y="10" width="14" height="22" rx="2" fill="#3a3a40"/><rect x="16" y="14" width="8" height="14" fill="#ffd27a"/><path d="M15 10q5-7 10 0" stroke="#555" stroke-width="2" fill="none"/></svg>',
-  note_candle: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.7)" style="color:#5a3a22">' + MSYM.candle + '</g><text x="26" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">O</text></svg>',
-  note_key: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.55)" style="color:#5a3a22">' + MSYM.key + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">E</text></svg>',
-  note_raven: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.55)" style="color:#2a1d0c">' + MSYM.raven + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">R</text></svg>',
-  note_moon: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.6)" style="color:#5a3a22">' + MSYM.moon + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">S</text></svg>',
+  note_candle: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(20 20) scale(.7)" style="color:#5a3a22">' + MSYM.candle + '</g></svg>',
+  note_key: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(20 20) scale(.55)" style="color:#5a3a22">' + MSYM.key + '</g></svg>',
+  note_raven: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(20 20) scale(.55)" style="color:#2a1d0c">' + MSYM.raven + '</g></svg>',
+  note_moon: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(20 20) scale(.6)" style="color:#5a3a22">' + MSYM.moon + '</g></svg>',
 });
 
 // ---------- boot ----------

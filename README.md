@@ -4,17 +4,24 @@ A multiplayer escape room, hosted free on GitHub Pages.
 
 **The host chooses the game** from the **Game** menu on the host page, before clicking Start game:
 
-| Game | Players |
-|---|---|
-| The Haunted Mansion | everyone together, up to about 20 |
-| The Locked Building | everyone together, up to about 20 |
-| Team race: Manager's Office vs Secret Lab | two teams, first team out wins |
-| The Manager's Office | everyone together, small group |
-| The Secret Lab | everyone together, small group |
+| Game | Trails | Exit | Hints |
+|---|---|---|---|
+| The Haunted Mansion · Normal | 4 | 4-letter name | 6 |
+| The Haunted Mansion · Hard | 5 | 5-letter name | 4 |
+| The Locked Building · Normal | 4 | 4-digit code | 6 |
+| The Locked Building · Hard | 5 | 5-digit code | 4 |
 
-Switching games clears the old game's progress but keeps the players. For an everyone-together
-game they move in automatically; for the race they pick a team. `GAME_MODE` and `COOP_ROOM` in
-`config.js` only set what shows before the host picks.
+Everyone plays together, up to about 20 players. Switching games clears the old game's progress but
+keeps the players. `COOP_ROOM` in `config.js` sets what shows before the host picks.
+
+**What Hard adds:** a 5th trail (the Séance trail in the mansion, the Security trail in the
+building), longer trails, codes that must be worked out instead of copied (mirror writing, counting
+only some shelves, sorting and reversing, atomic numbers to element symbols), clues spread across
+more rooms, red herrings, only 4 hints, and **jamming locks**: three wrong codes on a lock jam it
+for 30 seconds for the whole team, so guessing doesn't pay.
+
+The two-team race and the small Office and Lab games are still in the code. To offer them again, add
+them back to `GAMES` near the top of the script in `index.html` (the lines are there, commented out).
 
 **Everyone together: the two big games**
 - *The Haunted Mansion*: hall, portrait gallery, library, fireplace, parlour, kitchen, attic and
@@ -101,6 +108,35 @@ node serve.js
 Open http://localhost:8080/?host=change-me in one tab and http://localhost:8080 in another.
 
 ## Spoilers: the solutions
+
+<details><summary>Hard: The Haunted Mansion (exit password EDITH)</summary>
+
+- **Diary trail:** red book → silver key → iron box → matches → candelabra → diary clasp **HMR**
+  (Henry, Margaret, Rose, eldest first, from the gallery plaques) → CANDLE = **D**.
+- **Piano trail:** left half of the lullaby behind Rose's portrait (1:F 3:C 5:D) + right half in a wine
+  bottle in the cellar (2:A 4:A 6:E) → both on the piano → **FACADE** → KEY = **T**.
+- **Potion trail:** cookbook → crowbar in the kitchen stove → open the nailed crate → ladle → cauldron
+  **332** (3 candles, 3 faces in the gallery, 2 clock hands) → RAVEN = **E**.
+- **Attic trail:** lantern → lamp oil → light the attic → trunk **5881** (born 1885, backwards) →
+  MOON = **I**.
+- **Séance trail:** hall mirror → clock key in the parlour vase → wind the grandfather clock →
+  planchette → spirit board **VIOLET** (Rose's plaque: "forever among the violets") → HOURGLASS = **H**.
+- **Front door:** RAVEN, CANDLE, MOON, KEY, HOURGLASS → **EDITH**.
+</details>
+
+<details><summary>Hard: The Locked Building (exit code 47545)</summary>
+
+- **Desk trail:** plant → key → drawer → UV light → painting shows ELPAM (mirrored) → computer **MAPLE** →
+  top two shelves only: 2 red, 6 blue, 1 green → cabinet **261** → Note 1: tens digit of 7:40 = **4**.
+- **Lab trail:** fuse → fuse box → microscope (yellow, blue, red, green) → fridge **7618** → reagent →
+  whiteboard 10 · 8 · 7 = Ne O N → locker **NEON** → Note 2: the yellow tube is nitrogen = **7**.
+- **Coffee trail:** receipt + sticky note (alphabetical, then backwards: TEA, MUFFIN, COFFEE, BAGELS) →
+  safe **5162** → Note 3: books on the bottom shelf = **5**.
+- **Safety-log trail:** magnet → sink → USB stick → office computer → Note 4: test tubes = **4**.
+- **Security trail:** staff badge under the desk lamp → Q3 poster shows FY 2031 → badge reader on
+  the lab fridge wall **2031** → Note 5: letters in MAPLE = **5**.
+- **Exit door:** **47545**.
+</details>
 
 <details><summary>Co-op: The Haunted Mansion (exit password ROSE)</summary>
 

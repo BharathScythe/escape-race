@@ -669,6 +669,435 @@
     },
   };
 
+  // ====================================================================
+  // HARD versions. Each starts from its Normal game and replaces or adds what changes:
+  // a 5th trail, longer trails, clues that need counting or reading in other rooms,
+  // codes that must be worked out, fewer hints, and locks that jam after 3 wrong tries
+  // (hard: true, handled in index.html).
+  const P = window.PUZZLES;
+  const derive = (base, o) => Object.assign({}, base, o, {
+    items: Object.assign({}, base.items, o.items || {}),
+    targets: Object.assign({}, base.targets, o.targets || {}),
+    hints: Object.assign({}, base.hints, o.hints || {}),
+  });
+
+  // ---------------- The Haunted Mansion · Hard ----------------
+  // Five notes: RAVEN E, CANDLE D, MOON I, KEY T, HOURGLASS H. The door's five carved
+  // symbols spell the governess's name: EDITH.
+  P.mansion_hard = derive(P.mansion, {
+    title: 'The Haunted Mansion · Hard',
+    intro: 'Ashworth Manor again, but this time the old governess haunts it, and she is far less patient than little Rose. Five notes are hidden across the house. Every lock jams for 30 seconds after three wrong tries.',
+    hard: true,
+    maxHints: 4,
+    trails: [
+      { id: 'diary', name: 'Diary trail', color: '#e8b04a', steps: ['book', 'ironbox', 'candles', 'diary'], item: 'note_candle' },
+      { id: 'piano', name: 'Piano trail', color: '#8fb3ff', steps: ['sheet', 'sheet2', 'melody', 'piano'], item: 'note_key' },
+      { id: 'potion', name: 'Potion trail', color: '#7fd18b', steps: ['recipe', 'crowbar', 'ladle', 'brew'], item: 'note_raven' },
+      { id: 'attic', name: 'Attic trail', color: '#c48bff', steps: ['lantern', 'oil', 'light', 'trunk'], item: 'note_moon' },
+      { id: 'seance', name: 'Séance trail', color: '#ff8fa3', steps: ['mirror', 'clockkey', 'chimes', 'ouija'], item: 'note_hourglass' },
+    ],
+    steps: ['book', 'ironbox', 'candles', 'diary', 'sheet', 'sheet2', 'melody', 'piano', 'recipe', 'crowbar', 'ladle', 'brew',
+            'lantern', 'oil', 'light', 'trunk', 'mirror', 'clockkey', 'chimes', 'ouija', 'escaped'],
+    hints: {
+      diary: 'The diary clasp wants the family\'s initials, eldest first. Read the full names on the gallery plaques.',
+      sheet: 'Half of the lullaby is behind the girl\'s portrait.',
+      sheet2: 'The other half of the lullaby was rolled up and hidden like a message in a bottle. Check the cellar\'s wine rack.',
+      melody: 'Put both halves of the sheet music on the piano.',
+      piano: 'Six numbered notes across the two halves. Play them in order, 1 to 6.',
+      recipe: 'Read the cookbook in the kitchen. The amounts are hidden in other rooms.',
+      crowbar: 'Something heavy is tucked inside the kitchen stove.',
+      ladle: 'The cellar crate is nailed shut. Use the crowbar on it.',
+      brew: 'RED = candles on the library candelabra, GREEN = faces in the portrait gallery, BLUE = hands on the grandfather clock.',
+      trunk: 'Read what is engraved on the trunk, then look at Rose\'s plaque in the gallery.',
+      mirror: 'Mirrors can hold messages. Try the one in the front hall.',
+      clockkey: 'A key for winding something. Look in the vase in the parlour.',
+      chimes: 'Wind the grandfather clock with the clock key.',
+      ouija: 'Ask the spirit board for Rose\'s favourite flower. Her plaque in the gallery mentions it.',
+      escaped: 'Five notes, five symbols on the front door. Put each note\'s letter under its symbol.',
+    },
+    items: {
+      sheet: { name: 'Sheet music (left half)', desc: 'Torn down the middle. Notes: 1:F  3:C  5:D' },
+      sheet2: { name: 'Sheet music (right half)', desc: 'Torn down the middle. Notes: 2:A  4:A  6:E' },
+      crowbar: { name: 'Crowbar', desc: 'A short iron crowbar, good for nailed lids.' },
+      clockkey: { name: 'Clock key', desc: 'A brass winding key, the kind used for grandfather clocks.' },
+      planchette: { name: 'Planchette', desc: 'A heart-shaped wooden pointer with a glass window, for a spirit board.' },
+      note_candle: { name: 'Ghost note: Candle', desc: 'A page in faded ink: a CANDLE drawn beside the letter D.' },
+      note_key: { name: 'Ghost note: Key', desc: 'A page in faded ink: a KEY drawn beside the letter T.' },
+      note_raven: { name: 'Ghost note: Raven', desc: 'A singed page: a RAVEN drawn beside the letter E.' },
+      note_moon: { name: 'Ghost note: Moon', desc: 'A page wrapped in a shawl: a MOON drawn beside the letter I.' },
+      note_hourglass: { name: 'Ghost note: Hourglass', desc: 'A page that smells of candle smoke: an HOURGLASS drawn beside the letter H.' },
+    },
+    targets: {
+      portraits: { inspect: () => 'Lord Henry Ashworth and Lady Margaret Ashworth. Henry is the elder. Their eyes seem to follow you.' },
+      // diary: now a 3-letter clasp
+      diary: {
+        inspect: h => {
+          if (!h.done('candles')) return 'An open diary, but it is too dark to read the faded ink.';
+          if (h.done('diary')) return already(h, 'diary', 'The Candle note is in the bag.');
+          return { msg: 'The diary is held shut by a clasp with three letter wheels. Scratched into the desk: "Our initials, eldest first."', prompt: true };
+        },
+        code: {
+          kind: 'letters', len: 3,
+          hashes: ['b1b2ccf2f072b85adca3e52800000e6696e4d804eb83d1e10c823a6ae90afb44'],
+          open: h => h.done('candles') && !h.done('diary'),
+          solve: h => {
+            h.give('note_candle');
+            h.set('diary', 'opened the diary clasp. A ghost note fell out! [Diary trail]');
+            return { title: 'Found: Ghost note', msg: 'The clasp springs open. A loose page falls out: a CANDLE drawn beside the letter D.' };
+          },
+        },
+      },
+      // piano: the lullaby is torn in two
+      portrait: {
+        inspect: h => {
+          if (h.done('sheet')) return already(h, 'sheet', 'Nothing else behind the portrait.');
+          h.give('sheet');
+          h.set('sheet', 'found half of a torn lullaby behind Rose\'s portrait. [Piano trail]');
+          return { title: 'Found: Sheet music (left half)', msg: 'Behind the portrait: half of a torn lullaby. Notes: 1:F  3:C  5:D. Where is the other half?' };
+        },
+      },
+      winerack: {
+        inspect: h => {
+          if (h.done('sheet2')) return already(h, 'sheet2', 'Just dusty bottles now.');
+          h.give('sheet2');
+          h.set('sheet2', 'found the other half of the lullaby rolled up in a wine bottle. [Piano trail]');
+          return { title: 'Found: Sheet music (right half)', msg: 'One bottle has paper inside instead of wine: the right half of the lullaby. Notes: 2:A  4:A  6:E.' };
+        },
+      },
+      piano: {
+        inspect: h => {
+          if (h.done('piano')) return already(h, 'piano', 'The Key note is in the bag.');
+          if (!h.done('melody')) {
+            const on = [h.done('standA') && 'the left half', h.done('standB') && 'the right half'].filter(Boolean);
+            return on.length ? `The stand holds ${on[0]} of the lullaby. The other half is missing.` : 'The music stand is empty. Someone scratched "play my lullaby" into the lid.';
+          }
+          return { msg: 'Both halves are on the stand: 1:F 3:C 5:D | 2:A 4:A 6:E. Play the six notes.', prompt: true };
+        },
+        use: {
+          sheet: h => {
+            h.take('sheet'); h.set('standA');
+            if (h.done('standB')) { h.set('melody', 'put both halves of the lullaby on the piano. [Piano trail]'); return { title: 'Both halves on the stand', msg: 'The torn edges line up: 1:F 3:C 5:D | 2:A 4:A 6:E.' }; }
+            return 'You put the left half on the stand. The right half is still missing.';
+          },
+          sheet2: h => {
+            h.take('sheet2'); h.set('standB');
+            if (h.done('standA')) { h.set('melody', 'put both halves of the lullaby on the piano. [Piano trail]'); return { title: 'Both halves on the stand', msg: 'The torn edges line up: 1:F 3:C 5:D | 2:A 4:A 6:E.' }; }
+            return 'You put the right half on the stand. The left half is still missing.';
+          },
+        },
+        code: {
+          kind: 'letters', len: 6,
+          hashes: ['615facee86ca5ebfbecf7013a7599d098aeff0bcf93f4cfd96da1aab97e14093'],
+          open: h => h.done('melody') && !h.done('piano'),
+          solve: h => {
+            h.give('note_key');
+            h.set('piano', 'played the whole lullaby. A ghost note appeared! [Piano trail]');
+            return { title: 'Found: Ghost note', msg: 'The full lullaby rings through the house. The lid creaks open: a page with a KEY drawn beside the letter T.' };
+          },
+        },
+      },
+      // potion: amounts hidden in other rooms; the crate is nailed shut
+      cookbook: {
+        inspect: h => {
+          h.set('recipe', 'read the ghost-calming recipe. [Potion trail]');
+          return { title: 'Cookbook', msg: '"Ghost-calming brew, in this order: RED, as many ladles as there are candles on the library candelabra. GREEN, as many as the faces in the portrait gallery. BLUE, as many as the hands on the grandfather clock."' };
+        },
+      },
+      stove: {
+        inspect: h => {
+          if (h.done('crowbar')) return already(h, 'crowbar', 'The oven is empty now.');
+          h.give('crowbar');
+          h.set('crowbar', 'found a crowbar inside the cold stove. [Potion trail]');
+          return { title: 'Found: Crowbar', msg: 'The oven door creaks open. Inside, among the ashes: a short iron crowbar.' };
+        },
+      },
+      crate: {
+        inspect: h => h.done('ladle') ? already(h, 'ladle', 'Only straw left in the crate.') : 'An old crate. Its lid is nailed shut. Something long rattles inside.',
+        use: {
+          crowbar: h => {
+            h.take('crowbar'); h.give('ladle');
+            h.set('ladle', 'prised open the cellar crate and found a ladle. [Potion trail]');
+            return { title: 'Found: Ladle', msg: 'The nails screech out. Under the straw: a long iron ladle.' };
+          },
+        },
+      },
+      cauldron: {
+        inspect: h => {
+          if (h.done('brew')) return already(h, 'brew', 'The Raven note is in the bag.');
+          if (!h.has('ladle')) return 'A cauldron on the stove, with red, green and blue bottles beside it. You need something to ladle with.';
+          return { msg: 'How many ladles of RED, then GREEN, then BLUE?', prompt: true };
+        },
+        code: {
+          kind: 'digits', len: 3,
+          hashes: ['ebe5a7929321ed3a7d95ee4468f4590b650470af3f2fe39709c04832e5f7e1fc'],
+          open: h => h.has('ladle') && !h.done('brew'),
+          solve: h => {
+            h.give('note_raven');
+            h.set('brew', 'brewed the potion. A ghost note rose from the steam! [Potion trail]');
+            return { title: 'Found: Ghost note', msg: 'The brew glows and a singed page drifts out of the steam: a RAVEN drawn beside the letter E.' };
+          },
+        },
+      },
+      // attic: the trunk code is the birth year, backwards
+      trunk: {
+        inspect: h => {
+          if (!h.done('light')) return 'Pitch black. The floorboards creak, but you can\'t see a thing. You need a light up here.';
+          if (h.done('trunk')) return already(h, 'trunk', 'The Moon note is in the bag.');
+          return { msg: 'An old trunk marked "R.A." with a 4-digit lock. Engraved under the lock: "The year I was born, written backwards."', prompt: true };
+        },
+        use: P.mansion.targets.trunk.use,   // the lit lantern lights the attic, as in Normal
+        code: {
+          kind: 'digits', len: 4,
+          hashes: ['dcaa36fc33fc9bedb2da2d2b16dce024a114e1b91b2021de9b7ba0f4c6471ee2'],
+          open: h => h.done('light') && !h.done('trunk'),
+          solve: h => {
+            h.give('note_moon');
+            h.set('trunk', 'opened Rose\'s trunk. A ghost note was inside! [Attic trail]');
+            return { title: 'Found: Ghost note', msg: 'Inside, wrapped in a shawl: a page with a MOON drawn beside the letter I.' };
+          },
+        },
+      },
+      // séance trail (new)
+      mirror: {
+        inspect: h => {
+          h.set('mirror', 'wiped the hall mirror and read the ghost\'s message. [Séance trail]');
+          return { title: 'Words in the mirror', msg: 'As you wipe the dust, letters appear in the fog: "Wind the clock to midnight. Then ask the board for her favourite flower."' };
+        },
+      },
+      vase: {
+        inspect: h => {
+          if (h.done('clockkey')) return already(h, 'clockkey', 'Just dried flowers now.');
+          h.give('clockkey');
+          h.set('clockkey', 'found a clock key in the parlour vase. [Séance trail]');
+          return { title: 'Found: Clock key', msg: 'Under the dried flowers: a brass winding key.' };
+        },
+      },
+      clock: {
+        inspect: h => h.done('chimes')
+          ? already(h, 'chimes', 'The clock is silent again, its little door open.')
+          : 'A grandfather clock, stopped at midnight: both hands point straight up. There is a winding hole in the face.',
+        use: {
+          clockkey: h => {
+            h.take('clockkey'); h.give('planchette');
+            h.set('chimes', 'wound the grandfather clock. It struck twelve! [Séance trail]');
+            return { title: 'Twelve chimes', msg: 'The clock whirs and strikes twelve. A small door in its case swings open: inside is a wooden planchette.' };
+          },
+        },
+      },
+      ouija: {
+        inspect: h => {
+          if (h.done('ouija')) return already(h, 'ouija', 'The Hourglass note is in the bag.');
+          if (!h.has('planchette')) return 'A spirit board on the parlour table, letters A to Z in an arc. Its planchette is missing.';
+          return { msg: 'You rest your fingers on the planchette and ask for her favourite flower. Spell it out.', prompt: true };
+        },
+        code: {
+          kind: 'letters', len: 6,
+          hashes: ['450c24e0346f84d5b9a066ef8acf2325db5c39576a48d057c16af753ae5e6de3'],
+          open: h => h.has('planchette') && !h.done('ouija'),
+          solve: h => {
+            h.give('note_hourglass');
+            h.set('ouija', 'spoke to the spirit board. A ghost note appeared! [Séance trail]');
+            return { title: 'Found: Ghost note', msg: 'The planchette glides by itself and stops. A page drifts down from the ceiling: an HOURGLASS drawn beside the letter H.' };
+          },
+        },
+      },
+      door: {
+        inspect: () => ({ msg: 'Five symbols are carved above five letter wheels: RAVEN, CANDLE, MOON, KEY, HOURGLASS. Say her name.', prompt: true }),
+        code: {
+          kind: 'letters', len: 5,
+          hashes: ['fe4569dfeb418935a619b3a8b35425a06abb7a5de1e1f5c32d9ff0e393ec31a4'],
+          open: () => true,
+          solve: h => { h.escape(); return { title: 'You escaped!', msg: 'You speak her name, "Edith", and the wheels lock into place. The door bursts open and the whole house sighs. Everyone is free!' }; },
+        },
+      },
+    },
+  });
+
+  // ---------------- The Locked Building · Hard ----------------
+  // Five notes: 4 · 7 · 5 · 4 · 5  →  exit code 47545.
+  const PC_HARD = 'A note on the desktop: "Filing cabinet = how many RED, then BLUE, then GREEN books are on the TOP TWO shelves only." There is a free USB port on the side.';
+  P.building_hard = derive(P.building, {
+    title: 'The Locked Building · Hard',
+    intro: 'Lockdown again, and this time security is tighter. Five trails each hide one digit of a 5-digit exit code, the clues are harder to read, and every lock jams for 30 seconds after three wrong tries.',
+    hard: true,
+    maxHints: 4,
+    trails: [
+      { id: 'desk', name: 'Desk trail', color: '#e3a857', steps: ['key', 'drawer', 'uv', 'pc', 'cabinet'], item: 'memo' },
+      { id: 'lab', name: 'Lab trail', color: '#4cc4b2', steps: ['fuse', 'power', 'scope', 'fridge', 'board', 'locker'], item: 'labcard' },
+      { id: 'coffee', name: 'Coffee trail', color: '#d9826b', steps: ['receipt', 'note', 'safe'], item: 'safenote' },
+      { id: 'log', name: 'Safety-log trail', color: '#9b8cf0', steps: ['magnet', 'usb', 'log'], item: 'printout' },
+      { id: 'security', name: 'Security trail', color: '#e86f8a', steps: ['badge', 'targets', 'reader'], item: 'note5' },
+    ],
+    steps: ['key', 'drawer', 'uv', 'pc', 'cabinet', 'fuse', 'power', 'scope', 'fridge', 'board', 'locker',
+            'receipt', 'note', 'safe', 'magnet', 'usb', 'log', 'badge', 'targets', 'reader', 'escaped'],
+    hints: {
+      pc: 'The painting\'s letters are back to front. Read them in a mirror, then type them into the computer.',
+      cabinet: 'Count only the top two shelves: red, then blue, then green.',
+      fridge: 'Use the poster to turn each tube\'s symbol into a number, in the order the slide gives: yellow, blue, red, green.',
+      locker: 'The whiteboard gives atomic numbers. Turn each into its element symbol on the poster, and read the symbols as one word.',
+      safe: 'Sort the four items on the receipt alphabetically, then reverse that order. Read their counts off the receipt.',
+      badge: 'Something is tucked under the base of the desk lamp.',
+      targets: 'Read the Q3 TARGETS poster above the desk.',
+      reader: 'The badge says where its PIN is. The badge reader is on the lab fridge wall.',
+      escaped: 'You need five digits, one from each note. Each note says where to look, and some ask you to count.',
+    },
+    items: {
+      memo: { name: 'Note 1', desc: 'EXIT CODE, 1st digit = the TENS digit of the minutes on the stopped wall clock.' },
+      labcard: { name: 'Note 2', desc: 'EXIT CODE, 2nd digit = the atomic number of the YELLOW test tube.' },
+      safenote: { name: 'Note 3', desc: 'EXIT CODE, 3rd digit = how many books are on the BOTTOM shelf.' },
+      printout: { name: 'Note 4', desc: 'EXIT CODE, 4th digit = how many test tubes stand on the lab bench.' },
+      badge: { name: 'Staff badge', desc: 'A staff badge with no photo. On the back: "PIN = the financial year on the Q3 TARGETS poster."' },
+      note5: { name: 'Note 5', desc: 'EXIT CODE, 5th digit = how many letters are in the office computer\'s password.' },
+    },
+    targets: {
+      painting: {
+        inspect: h => h.done('uv') ? 'Under UV light the sky reads E L P A M, with a tiny mirror drawn beside it.' : 'An oil painting of a harbour at dusk. The sky looks oddly blotchy.',
+        use: {
+          uvlight: h => {
+            if (h.done('uv')) return already(h, 'uv', 'The sky reads E L P A M.');
+            h.set('uv', 'shone the UV light on the painting. Backwards letters appeared! [Desk trail]');
+            return { title: 'Hidden letters', msg: 'Glowing letters appear across the sky: E L P A M, with a tiny mirror drawn beside them.' };
+          },
+        },
+      },
+      computer: {
+        inspect: h => h.done('pc')
+          ? { title: `Unlocked by ${h.by('pc')}`, msg: PC_HARD }
+          : { msg: 'The computer is locked. It asks for a password.', prompt: true },
+        code: {
+          kind: 'letters', len: 5,
+          hashes: ['ae9e7da0a075fc1657b384e668b905a976dca311c6e7262a329f2a609dd59fae'],
+          open: h => !h.done('pc'),
+          solve: h => { h.set('pc', 'logged into the office computer. [Desk trail]'); return { title: 'Logged in', msg: PC_HARD }; },
+        },
+        use: {
+          usb: h => {
+            if (!h.done('pc')) return 'The computer is locked, so it won\'t read the USB stick. Someone needs to log in first (Desk trail).';
+            h.take('usb'); h.give('printout');
+            h.set('log', 'read the safety log from the USB stick. Note 4 is in the bag! [Safety-log trail]');
+            return { title: 'Found: Note 4', msg: 'The safety log\'s last line: "EXIT CODE, 4th digit = how many test tubes stand on the lab bench." You print it out.' };
+          },
+        },
+      },
+      cabinet: {
+        inspect: h => h.done('cabinet') ? already(h, 'cabinet', 'Note 1 is in the bag.') : { msg: 'A filing cabinet with three drawers and a 3-digit combination lock.', prompt: true },
+        code: {
+          kind: 'digits', len: 3,
+          hashes: ['f84b2d425775c1122c4f7b7c4c98115e660e4c304fdcedcd4eb453458cd4f449'],
+          open: h => !h.done('cabinet'),
+          solve: h => {
+            h.give('memo');
+            h.set('cabinet', 'opened the filing cabinet. Note 1 is in the bag! [Desk trail]');
+            return { title: 'Found: Note 1', msg: 'Inside: "EXIT CODE, 1st digit = the TENS digit of the minutes on the stopped wall clock."' };
+          },
+        },
+      },
+      microscope: {
+        inspect: h => {
+          if (!h.done('power')) return 'The microscope lamp is dead. No power.';
+          h.set('scope', 'read the slide under the microscope. [Lab trail]');
+          return { title: 'Under the microscope', msg: 'Tiny handwriting on the slide: "Fridge code = the atomic numbers of the tubes, in the order YELLOW, BLUE, RED, GREEN."' };
+        },
+      },
+      fridge: {
+        inspect: h => h.done('fridge') ? already(h, 'fridge', 'The reagent spray is in the bag. The display reads 4 °C.') : { msg: 'A sample fridge with a 4-digit lock. The display reads 4 °C.', prompt: true },
+        code: {
+          kind: 'digits', len: 4,
+          hashes: ['7d733336331947dc7cbdbe2e5e676c3608ed67be73e22d0d3bc6b59ba787e8a8'],
+          open: h => !h.done('fridge'),
+          solve: h => {
+            h.give('reagent');
+            h.set('fridge', 'opened the sample fridge and found a reagent spray. [Lab trail]');
+            return { title: 'Found: Reagent spray', msg: 'Inside, next to old samples: a spray bottle labelled "Ink developer".' };
+          },
+        },
+      },
+      whiteboard: {
+        inspect: h => h.done('board') ? 'The developed writing reads: 10 · 8 · 7 = locker code.' : 'Wiped clean, but faint smudges remain where someone wrote something.',
+        use: {
+          reagent: h => {
+            if (h.done('board')) return already(h, 'board', 'It reads: 10 · 8 · 7 = locker code.');
+            h.set('board', 'sprayed the whiteboard. Hidden numbers appeared! [Lab trail]');
+            return { title: 'Hidden writing', msg: 'Ghostly marker appears: "10 · 8 · 7 = locker code". The locker takes letters, not numbers.' };
+          },
+        },
+      },
+      locker: {
+        inspect: h => h.done('locker') ? already(h, 'locker', 'Note 2 is in the bag.') : { msg: 'A tall storage locker with a 4-letter combination lock.', prompt: true },
+        code: {
+          kind: 'letters', len: 4,
+          hashes: ['770bddee273119ddf2856ba7ff05417f1f4f24aa9dfd357c2ad1e58fcb1ebabc'],
+          open: h => !h.done('locker'),
+          solve: h => {
+            h.give('labcard');
+            h.set('locker', 'opened the storage locker. Note 2 is in the bag! [Lab trail]');
+            return { title: 'Found: Note 2', msg: 'Taped inside the locker door: "EXIT CODE, 2nd digit = the atomic number of the YELLOW test tube."' };
+          },
+        },
+      },
+      window: {
+        inspect: h => {
+          h.set('note', 'read the sticky note on the window. [Coffee trail]');
+          return { title: 'Sticky note', msg: 'Stuck to the glass: "Safe = my order. Sort what I bought alphabetically, then read it backwards."' };
+        },
+      },
+      certificate: {
+        inspect: h => h.done('safe') ? already(h, 'safe', 'Note 3 is in the bag.') : { msg: '"Employee of the Month". The frame swings out on a hinge. Behind it: a small wall safe with a 4-digit lock.', prompt: true },
+        code: {
+          kind: 'digits', len: 4,
+          hashes: ['99796121549ffe3b42c4abf7b9c3dd1cd0f450ceb064ec9ba3517e46fea60f5c'],
+          open: h => !h.done('safe'),
+          solve: h => {
+            h.give('safenote');
+            h.set('safe', 'cracked the wall safe. Note 3 is in the bag! [Coffee trail]');
+            return { title: 'Found: Note 3', msg: 'Inside the safe: "EXIT CODE, 3rd digit = how many books are on the BOTTOM shelf."' };
+          },
+        },
+      },
+      // security trail (new)
+      lamp: {
+        inspect: h => {
+          if (h.done('badge')) return already(h, 'badge', 'Nothing else under the lamp.');
+          h.give('badge');
+          h.set('badge', 'found a staff badge under the desk lamp. [Security trail]');
+          return { title: 'Found: Staff badge', msg: 'Under the lamp base: a staff badge. On the back: "PIN = the financial year on the Q3 TARGETS poster."' };
+        },
+      },
+      targets: {
+        inspect: h => {
+          h.set('targets', 'read the Q3 TARGETS poster. [Security trail]');
+          return { title: 'Q3 TARGETS', msg: 'Sales up 12%. Complaints down 3%. Printed in the corner: "FY 2031".' };
+        },
+      },
+      reader: {
+        inspect: h => {
+          if (h.done('reader')) return already(h, 'reader', 'Note 5 is in the bag.');
+          if (!h.has('badge')) return 'A badge reader with a keypad, wired to a cupboard. It needs a staff badge first.';
+          return { msg: 'You tap the staff badge. "ENTER PIN".', prompt: true };
+        },
+        code: {
+          kind: 'digits', len: 4,
+          hashes: ['9bd12f89ffdb5e8e346153243102ec6cfa9ef169a262b9aa3473ee35a39881c1'],
+          open: h => h.has('badge') && !h.done('reader'),
+          solve: h => {
+            h.give('note5');
+            h.set('reader', 'opened the security cupboard. Note 5 is in the bag! [Security trail]');
+            return { title: 'Found: Note 5', msg: 'The cupboard clicks open: "EXIT CODE, 5th digit = how many letters are in the office computer\'s password."' };
+          },
+        },
+      },
+      door: {
+        inspect: () => ({ msg: 'The building\'s exit door has a 5-digit keypad. One digit comes from each of the five notes.', prompt: true }),
+        code: {
+          kind: 'digits', len: 5,
+          hashes: ['552973dd84205061f2d89948267fa0bb02246adad058783c92f7afca48ff4ea3'],
+          open: () => true,
+          solve: h => { h.escape(); return { title: 'You escaped!', msg: 'The keypad beeps green and the doors open. Everyone is out!' }; },
+        },
+      },
+    },
+  });
+
   // The exit only takes a password once these clues are found (see the rule in index.html).
   window.PUZZLES.office.exitNeeds = ['cabinet'];
   window.PUZZLES.lab.exitNeeds = ['board'];
