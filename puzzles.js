@@ -452,5 +452,224 @@
         },
       },
     },
+
+    // ------------------------------------------------------------------
+    // Co-op: The Haunted Mansion. Four trails each end with one of the ghost's notes:
+    // a symbol drawn beside a letter. The front door has the four symbols carved above
+    // four letter wheels (RAVEN, CANDLE, MOON, KEY), which spells the ghost's name: ROSE.
+    mansion: {
+      title: 'The Haunted Mansion',
+      intro: 'You stayed one night too long at Ashworth Manor, and every door has slammed shut. The ghost of the house left four notes hidden around the mansion. Find them all to learn her name.',
+      walls: ['Hall · Front door', 'Hall · Portrait gallery', 'Library · Bookshelf', 'Library · Fireplace',
+              'Parlour · Piano', 'Kitchen', 'Attic', 'Cellar'],
+      maxHints: 6,
+      trails: [
+        { id: 'diary', name: 'Diary trail', color: '#e8b04a', steps: ['book', 'ironbox', 'candles', 'diary'], item: 'note_candle' },
+        { id: 'piano', name: 'Piano trail', color: '#8fb3ff', steps: ['sheet', 'melody', 'piano'], item: 'note_key' },
+        { id: 'potion', name: 'Potion trail', color: '#7fd18b', steps: ['recipe', 'ladle', 'brew'], item: 'note_raven' },
+        { id: 'attic', name: 'Attic trail', color: '#c48bff', steps: ['lantern', 'oil', 'light', 'trunk'], item: 'note_moon' },
+      ],
+      steps: ['book', 'ironbox', 'candles', 'diary', 'sheet', 'melody', 'piano', 'recipe', 'ladle', 'brew',
+              'lantern', 'oil', 'light', 'trunk', 'escaped'],
+      hints: {
+        book: 'One book on the library shelf does not sit flush. Pull it.',
+        ironbox: 'The silver key fits something in the fireplace.',
+        candles: 'Light the candelabra on the library reading desk with the matches.',
+        diary: 'Now that the desk is lit, read the diary.',
+        sheet: 'Portraits can hide things. Check behind the girl\'s portrait in the gallery.',
+        melody: 'Put the sheet music on the piano in the parlour.',
+        piano: 'The sheet numbers the notes. Play them in order, 1 to 4.',
+        recipe: 'Read the cookbook on the kitchen shelf.',
+        ladle: 'Every cauldron needs a ladle. Try the old crate in the cellar.',
+        brew: 'With the ladle in the bag, use the cauldron: how many ladles of red, then green, then blue?',
+        lantern: 'An empty lantern hangs on a hook in the kitchen.',
+        oil: 'The barrel in the cellar holds lamp oil. Use the lantern on it.',
+        light: 'The attic is pitch black. Use the lit lantern on the trunk up there.',
+        trunk: 'The trunk belongs to R.A. Her portrait plaque in the gallery shows the year she died.',
+        escaped: 'Match each note\'s symbol to the symbols carved above the front door\'s letter wheels.',
+      },
+      items: {
+        silverkey: { name: 'Silver key', desc: 'A small tarnished silver key.' },
+        matches: { name: 'Matches', desc: 'A box of long fireplace matches.' },
+        sheet: { name: 'Sheet music', desc: 'A lullaby. The notes are numbered: 3:A  1:B  4:D  2:E.' },
+        ladle: { name: 'Ladle', desc: 'A long iron ladle.' },
+        lantern: { name: 'Empty lantern', desc: 'An oil lantern with a dry wick. It needs oil.' },
+        lanternlit: { name: 'Lit lantern', desc: 'A lantern full of oil, burning brightly.' },
+        note_candle: { name: 'Ghost note: Candle', desc: 'A page in faded ink: a CANDLE drawn beside the letter O.' },
+        note_key: { name: 'Ghost note: Key', desc: 'A page in faded ink: a KEY drawn beside the letter E.' },
+        note_raven: { name: 'Ghost note: Raven', desc: 'A singed page: a RAVEN drawn beside the letter R.' },
+        note_moon: { name: 'Ghost note: Moon', desc: 'A page wrapped in a shawl: a MOON drawn beside the letter S.' },
+      },
+      targets: {
+        // ---- diary trail ----
+        book: {
+          inspect: h => {
+            if (h.done('book')) return already(h, 'book', 'The gap on the shelf is empty.');
+            h.give('silverkey');
+            h.set('book', 'pulled a loose book. A silver key fell out! [Diary trail]');
+            return { title: 'Found: Silver key', msg: 'The red book slides out and a small silver key drops to the floor.' };
+          },
+        },
+        ironbox: {
+          inspect: h => h.done('ironbox') ? already(h, 'ironbox', 'The iron box is empty.') : 'An iron box sits in the cold grate. Its little lock is silver.',
+          use: {
+            silverkey: h => {
+              h.take('silverkey'); h.give('matches');
+              h.set('ironbox', 'opened the iron box in the fireplace and found matches. [Diary trail]');
+              return { title: 'Found: Matches', msg: 'The silver key turns. Inside the box: long fireplace matches.' };
+            },
+          },
+        },
+        candles: {
+          inspect: h => h.done('candles') ? `Lit by ${h.by('candles')}. The candles light up the reading desk.` : 'A candelabra with three unlit candles.',
+          use: {
+            matches: h => {
+              h.take('matches');
+              h.set('candles', 'lit the candelabra in the library. [Diary trail]');
+              return { title: 'Candles lit', msg: 'Warm light spreads across the reading desk. Now you can see the open diary.' };
+            },
+          },
+        },
+        diary: {
+          inspect: h => {
+            if (!h.done('candles')) return 'An open diary, but it is too dark to read the faded ink.';
+            if (h.done('diary')) return already(h, 'diary', 'The Candle note is in the bag.');
+            h.give('note_candle');
+            h.set('diary', 'read the diary. A ghost note fell out! [Diary trail]');
+            return { title: 'Found: Ghost note', msg: 'The last entry reads: "If you find all my notes, you will know my name." A loose page falls out: a CANDLE drawn beside the letter O.' };
+          },
+        },
+
+        // ---- piano trail ----
+        portrait: {
+          inspect: h => {
+            if (h.done('sheet')) return already(h, 'sheet', 'Nothing else behind the portrait.');
+            h.give('sheet');
+            h.set('sheet', 'found sheet music behind Rose\'s portrait. [Piano trail]');
+            return { title: 'Found: Sheet music', msg: 'The portrait swings away from the wall. Tucked behind it: a lullaby. The notes are numbered: 3:A  1:B  4:D  2:E.' };
+          },
+        },
+        portraits: { inspect: () => 'Lord and Lady Ashworth. Their eyes seem to follow you around the room.' },
+        piano: {
+          inspect: h => {
+            if (h.done('piano')) return already(h, 'piano', 'The Key note is in the bag.');
+            if (!h.done('melody')) return 'The music stand is empty. Someone scratched "play my lullaby" into the lid.';
+            return { msg: 'The sheet on the stand reads: 3:A  1:B  4:D  2:E. Play the four notes.', prompt: true };
+          },
+          use: {
+            sheet: h => {
+              h.take('sheet');
+              h.set('melody', 'put the sheet music on the piano. [Piano trail]');
+              return { title: 'Sheet on the stand', msg: 'The notes are numbered: 3:A  1:B  4:D  2:E. Tap the piano to play them.' };
+            },
+          },
+          code: {
+            kind: 'letters', len: 4,
+            hashes: ['3a28436973e1d6007dc8422d15e63a00eaa1195ad91aecc8dc604abb3b43a87f'],
+            open: h => h.done('melody') && !h.done('piano'),
+            solve: h => {
+              h.give('note_key');
+              h.set('piano', 'played the lullaby. A ghost note appeared in the piano! [Piano trail]');
+              return { title: 'Found: Ghost note', msg: 'The lullaby rings through the house and the piano lid creaks open. Inside: a page with a KEY drawn beside the letter E.' };
+            },
+          },
+        },
+
+        // ---- potion trail ----
+        cookbook: {
+          inspect: h => {
+            h.set('recipe', 'read the ghost-calming recipe in the cookbook. [Potion trail]');
+            return { title: 'Cookbook', msg: '"Ghost-calming brew: 2 ladles of RED, 1 of GREEN, 3 of BLUE. Add the colours in that order and stir."' };
+          },
+        },
+        crate: {
+          inspect: h => {
+            if (h.done('ladle')) return already(h, 'ladle', 'Only straw left in the crate.');
+            h.give('ladle');
+            h.set('ladle', 'found a ladle in the cellar crate. [Potion trail]');
+            return { title: 'Found: Ladle', msg: 'Under the straw: a long iron ladle.' };
+          },
+        },
+        cauldron: {
+          inspect: h => {
+            if (h.done('brew')) return already(h, 'brew', 'The Raven note is in the bag.');
+            if (!h.has('ladle')) return 'A cauldron on the stove, with red, green and blue bottles beside it. You need something to ladle with.';
+            return { msg: 'How many ladles of RED, then GREEN, then BLUE?', prompt: true };
+          },
+          code: {
+            kind: 'digits', len: 3,
+            hashes: ['48df6c7ea542cc51f30e792ae8a52da18abd3c5aa0c3696081a34405658f03f7'],
+            open: h => h.has('ladle') && !h.done('brew'),
+            solve: h => {
+              h.give('note_raven');
+              h.set('brew', 'brewed the potion. A ghost note rose from the steam! [Potion trail]');
+              return { title: 'Found: Ghost note', msg: 'The brew glows and a singed page drifts out of the steam: a RAVEN drawn beside the letter R.' };
+            },
+          },
+        },
+
+        // ---- attic trail ----
+        lanternhook: {
+          inspect: h => {
+            if (h.done('lantern')) return already(h, 'lantern', 'The hook is empty.');
+            h.give('lantern');
+            h.set('lantern', 'took the empty lantern from the kitchen. [Attic trail]');
+            return { title: 'Found: Empty lantern', msg: 'An oil lantern. The wick is dry: it needs oil.' };
+          },
+        },
+        barrel: {
+          inspect: h => h.done('oil') ? already(h, 'oil', 'The lantern is already full.') : 'A barrel marked LAMP OIL.',
+          use: {
+            lantern: h => {
+              h.take('lantern'); h.give('lanternlit');
+              h.set('oil', 'filled and lit the lantern. [Attic trail]');
+              return { title: 'Lit lantern', msg: 'You fill the lantern and light it. It burns brightly.' };
+            },
+          },
+        },
+        trunk: {
+          inspect: h => {
+            if (!h.done('light')) return 'Pitch black. The floorboards creak, but you can\'t see a thing. You need a light up here.';
+            if (h.done('trunk')) return already(h, 'trunk', 'The Moon note is in the bag.');
+            return { msg: 'An old trunk with "R.A." painted on the lid and a 4-digit lock.', prompt: true };
+          },
+          use: {
+            lanternlit: h => {
+              if (h.done('light')) return 'The attic is already lit.';
+              h.set('light', 'lit up the attic with the lantern. [Attic trail]');
+              return { title: 'Attic lit', msg: 'Light spills across the attic. In the corner: an old trunk marked "R.A." with a 4-digit lock.' };
+            },
+          },
+          code: {
+            kind: 'digits', len: 4,
+            hashes: ['04f841c0bc77e8ec7a7c646d7dca9853884d7160ce38a5b29b611be89cca5293'],
+            open: h => h.done('light') && !h.done('trunk'),
+            solve: h => {
+              h.give('note_moon');
+              h.set('trunk', 'opened Rose\'s trunk. A ghost note was inside! [Attic trail]');
+              return { title: 'Found: Ghost note', msg: 'Inside, wrapped in a shawl: a page with a MOON drawn beside the letter S.' };
+            },
+          },
+        },
+        chair: { inspect: () => 'An old rocking chair. It is rocking gently, all by itself.' },
+        winerack: { inspect: () => 'Dusty bottles. The oldest label says 1885.' },
+        clock: { inspect: () => 'A grandfather clock, stopped at midnight.' },
+
+        // ---- the exit ----
+        door: {
+          inspect: () => ({ msg: 'The front door has four symbols carved above four letter wheels: RAVEN, CANDLE, MOON, KEY. Say the ghost\'s name.', prompt: true }),
+          code: {
+            kind: 'letters', len: 4,
+            hashes: ['93e311acfbd42791a81882b1601d64a464e1aa5d37a3d07eda4ebf318d9ad613'],
+            open: () => true,
+            solve: h => { h.escape(); return { title: 'You escaped!', msg: 'You whisper "Rose" as the wheels click into place. The door swings open and a cold breeze carries a quiet "thank you". Everyone is free!' }; },
+          },
+        },
+      },
+    },
   };
+
+  // The exit only takes a password once these clues are found (see the rule in index.html).
+  window.PUZZLES.office.exitNeeds = ['cabinet'];
+  window.PUZZLES.lab.exitNeeds = ['board'];
 })();

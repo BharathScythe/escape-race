@@ -3,11 +3,24 @@
 A multiplayer escape room, hosted free on GitHub Pages. It has two modes, set by `GAME_MODE` in `config.js`.
 
 **Co-op (`'coop'`, the default): everyone together, up to about 20 players**
-- Everyone is locked in *The Locked Building*: the office and the lab joined together, 8 walls.
-- Four puzzle trails run side by side, so small groups can split up: Desk, Lab, Coffee and Safety log.
-  Each trail ends in a note with one digit of the 4-digit exit code. The Safety-log trail needs the
-  office computer, which the Desk trail unlocks.
-- One shared bag, one chat for everyone, and six hints, which players ask for per trail.
+
+The host picks the game on the host page before starting (`COOP_ROOM` in `config.js` sets the default):
+- *The Haunted Mansion*: hall, portrait gallery, library, fireplace, parlour, kitchen, attic and
+  cellar. Four trails (Diary, Piano, Potion, Attic) each end in one of the ghost's notes: a symbol
+  beside a letter. The symbols carved on the front door put the letters in order to spell her name.
+- *The Locked Building*: the office and the lab joined together, 8 walls. Four trails (Desk, Lab,
+  Coffee, Safety log) each end in a note with one digit of the exit code. The Safety-log trail needs
+  the office computer, which the Desk trail unlocks.
+
+Both have one shared bag, one chat for everyone, and six hints, which players ask for per trail.
+
+**The exit rule:** the exit refuses any password until every clue note is found ("found 2 of 4"), so
+nobody can guess their way out early. In the race rooms, the exit opens for codes once the room's last
+clue is found.
+
+**Practise without touching the live game:** add `?demo` to the link (for example
+`.../escape-race/?demo&host=<key>` in one tab and `.../escape-race/?demo` in another). Everything
+then stays inside that one browser.
 
 **Race (`'race'`): two teams, two rooms, first team out wins**
 - **Team Office** is locked in *The Manager's Office*; **Team Lab** is locked in *The Secret Lab*.
@@ -76,6 +89,19 @@ node serve.js
 Open http://localhost:8080/?host=change-me in one tab and http://localhost:8080 in another.
 
 ## Spoilers: the solutions
+
+<details><summary>Co-op: The Haunted Mansion (exit password ROSE)</summary>
+
+- **Diary trail:** loose red book → silver key → iron box in the fireplace → matches → light the
+  candelabra → read the diary → note: CANDLE = **O**.
+- **Piano trail:** behind Rose's portrait → sheet music (3:A 1:B 4:D 2:E) → put it on the piano →
+  play BEAD → note: KEY = **E**.
+- **Potion trail:** cookbook (2 red, 1 green, 3 blue) → ladle from the cellar crate → cauldron 213 →
+  note: RAVEN = **R**.
+- **Attic trail:** empty lantern in the kitchen → fill it at the lamp-oil barrel → use it on the attic
+  trunk → trunk 1897 (Rose's plaque: 1885–1897) → note: MOON = **S**.
+- **Front door:** the carved symbols read RAVEN, CANDLE, MOON, KEY → **ROSE**.
+</details>
 
 <details><summary>Co-op: The Locked Building (exit code 7834)</summary>
 

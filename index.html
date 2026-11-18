@@ -147,6 +147,9 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 /* host */
 .host { margin-top: 18px; display: grid; gap: 16px; }
 .hostbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.roompick { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.roompick select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: inherit; }
+.roompick select:disabled { opacity: .6; }
 .share { font: 500 14px/1.4 var(--mono); padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; }
 .hostgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -216,6 +219,9 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
   <!-- host -->
   <section class="host" id="host" hidden>
     <div class="hostbar">
+      <label class="roompick" id="hroomwrap" hidden>Game
+        <select id="hroom"></select>
+      </label>
       <button class="btn" id="hstart" style="--team: var(--good)">Start game</button>
       <button class="btn ghost" id="hreset">Reset rooms</button>
       <button class="btn ghost" id="hclear">Reset rooms and remove players</button>
@@ -241,8 +247,8 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 </div>
 
 <!-- Bump ?v= after editing config.js or puzzles.js so players' browsers fetch the new copy. -->
-<script src="config.js?v=3"></script>
-<script src="puzzles.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="puzzles.js?v=4"></script>
 <script>
 (function () {
 'use strict';
@@ -253,11 +259,22 @@ const TEAMS = MODE === 'race' ? {
   A: { name: 'Team Office', room: 'office', color: 'var(--office)' },
   B: { name: 'Team Lab', room: 'lab', color: 'var(--lab)' },
 } : {
-  C: { name: 'Everyone', room: 'building', color: 'var(--office)' },
+  C: { name: 'Everyone', room: null, color: 'var(--office)' },   // room: the host's pick, see roomOf
 };
 const TEAM_KEYS = Object.keys(TEAMS);
-const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker' };
-const maxHints = k => PZ[TEAMS[k].room].maxHints || 3;
+// Co-op games the host can choose between on the host page.
+const COOP_ROOMS = ['building', 'mansion'];
+const roomOf = k => {
+  if (TEAMS[k] && TEAMS[k].room) return TEAMS[k].room;
+  const r = DB.game && DB.game.room;
+  return COOP_ROOMS.includes(r) ? r : (COOP_ROOMS.includes(window.COOP_ROOM) ? window.COOP_ROOM : 'building');
+};
+const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker',
+  piano: 'piano', cauldron: 'cauldron', trunk: 'trunk' };
+const maxHints = k => PZ[roomOf(k)].maxHints || 3;
+// The rule: the exit takes no password until every clue is found. In a room with trails
+// that means each trail's final step (the notes); other rooms list theirs in exitNeeds.
+const exitNeeds = room => room.exitNeeds || (room.trails ? room.trails.map(tr => tr.steps[tr.steps.length - 1]) : []);
 const ROOT = 'escape-race';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -366,7 +383,7 @@ const me = () => (DB.players || {})[pid];
 const team = k => { const t = (DB.teams || {})[k] || {}; return { flags: t.flags || {}, inv: t.inv || {}, hints: t.hints || {}, escapedAt: t.escapedAt || null }; };
 const feedOf = k => Object.values((DB.feed || {})[k] || {}).sort((a, b) => a.t - b.t).slice(-80);
 const playersOf = k => Object.entries(DB.players || {}).filter(([, p]) => p.team === k).map(([id, p]) => ({ id, name: p.name, on: B.mode === 'demo' || !!(DB.online || {})[id] }));
-const progress = k => { const r = PZ[TEAMS[k].room]; const f = team(k).flags; return r.steps.filter(s => f[s]).length; };
+const progress = k => { const r = PZ[roomOf(k)]; const f = team(k).flags; return r.steps.filter(s => f[s]).length; };
 const fmt = ms => { ms = Math.max(0, ms | 0); const s = Math.floor(ms / 1000); const h = Math.floor(s / 3600); const m = Math.floor(s / 60) % 60; const ss = String(s % 60).padStart(2, '0'); return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + ss; };
 const elapsedFor = k => { const g = game(); const t = team(k); if (t.escapedAt) return t.escapedAt; if (g.phase !== 'playing' || !g.startedAt) return 0; return B.now() - g.startedAt; };
 
@@ -382,7 +399,7 @@ function render() {
   if (!presenceOn) { presenceOn = true; B.presence(pid); }
   $('join').hidden = true; $('game').hidden = false;
   document.documentElement.style.setProperty('--team', TEAMS[m.team].color);
-  const room = PZ[TEAMS[m.team].room];
+  const room = PZ[roomOf(m.team)];
   $('roomtitle').textContent = room.title;
   $('roomintro').textContent = room.intro;
   renderPeople(m.team);
@@ -398,7 +415,7 @@ function render() {
 function renderBoard() {
   const m = me(); const g = game();
   $('board').innerHTML = TEAM_KEYS.map(k => {
-    const t = team(k); const room = PZ[TEAMS[k].room]; const p = progress(k); const n = playersOf(k).length;
+    const t = team(k); const room = PZ[roomOf(k)]; const p = progress(k); const n = playersOf(k).length;
     let st = `${p}/${room.steps.length} steps · ${n} player${n === 1 ? '' : 's'}`, cls = '';
     if (t.escapedAt) { st = (MODE === 'race' ? (g.winner === k ? 'WINNER · ' : 'Escaped · ') : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
     return `<div class="chip${m && m.team === k ? ' mine' : ''}" style="--c:${TEAMS[k].color}"><div class="row"><span class="nm">${TEAMS[k].name}</span><span class="st ${cls}">${st}</span></div><div class="bar"><i style="width:${(p / room.steps.length) * 100}%"></i></div></div>`;
@@ -426,7 +443,7 @@ function renderBanner() {
 // Each step a player completes first earns points for them; hints cost the player who asked.
 const POINTS = { step: 10, note: 25, escape: 50, hint: -5 };
 function scores(k) {
-  const room = PZ[TEAMS[k].room]; const t = team(k);
+  const room = PZ[roomOf(k)]; const t = team(k);
   const finals = new Set((room.trails || []).map(tr => tr.steps[tr.steps.length - 1]));
   const rows = {};
   const row = rec => {
@@ -456,7 +473,7 @@ function renderScores(el, k) {
 
 // Trail progress (co-op building): which trails are done and which notes are found.
 function renderTrails(el, k) {
-  const room = PZ[TEAMS[k].room];
+  const room = PZ[roomOf(k)];
   if (!room.trails) { el.hidden = true; return; }
   const f = team(k).flags;
   el.hidden = false;
@@ -477,10 +494,10 @@ function tick() {
 function renderJoin() {
   if (MODE === 'coop') {
     $('jointitle').textContent = 'Join the escape';
-    $('joinintro').textContent = 'Everyone is locked in the same building. Split up and explore: whatever anyone finds lands in everyone\'s bag, and the team chat keeps you all talking. Find all four notes to get out.';
+    $('joinintro').textContent = 'Everyone is locked in together. Split up and explore: whatever anyone finds lands in everyone\'s bag, and the chat keeps you all talking. The exit only opens once all four clue notes are found.';
   }
   $('teampicks').innerHTML = TEAM_KEYS.map(k => {
-    const ps = playersOf(k); const room = PZ[TEAMS[k].room];
+    const ps = playersOf(k); const room = PZ[roomOf(k)];
     const label = MODE === 'coop' ? 'Join the game' : TEAMS[k].name;
     return `<button class="teampick" style="--c:${TEAMS[k].color}" data-team="${k}"><span class="nm">${label}</span><span class="rm">${esc(room.title)}</span><span class="who">${ps.length ? ps.length + ' joined: ' + ps.map(p => esc(p.name)).join(', ') : 'No one yet'}</span></button>`;
   }).join('');
@@ -505,7 +522,7 @@ function renderFeed(el, k) {
 }
 
 function renderBag(k) {
-  const room = PZ[TEAMS[k].room]; const inv = team(k).inv;
+  const room = PZ[roomOf(k)]; const inv = team(k).inv;
   const ids = Object.keys(inv).filter(id => room.items[id]).sort((a, b) => inv[a] - inv[b]);
   if (selected && !inv[selected]) selected = null;
   $('items').innerHTML = ids.length ? ids.map(id => `<button class="item" data-item="${id}" aria-pressed="${selected === id}">${ICONS[id] || ''}<span>${esc(room.items[id].name)}</span></button>`).join('')
@@ -515,7 +532,7 @@ function renderBag(k) {
 }
 
 function renderScene(k) {
-  const room = TEAMS[k].room; const t = team(k); const g = game();
+  const room = roomOf(k); const t = team(k); const g = game();
   const key = [room, wall, Object.keys(t.flags).sort().join(','), g.phase, !!t.escapedAt].join('|');
   const walls = PZ[room].walls;
   if (wall >= walls.length) wall = 0;
@@ -543,8 +560,18 @@ function renderHost() {
   const g = game();
   $('hstart').textContent = g.phase === 'playing' ? 'Game running' : 'Start game';
   $('hstart').disabled = g.phase === 'playing';
+  if (MODE === 'coop') {
+    $('hroomwrap').hidden = false;
+    const cur = roomOf(TEAM_KEYS[0]);
+    if ($('hroom').dataset.k !== cur + g.phase) {
+      $('hroom').innerHTML = COOP_ROOMS.map(r => `<option value="${r}"${r === cur ? ' selected' : ''}>${esc(PZ[r].title)}</option>`).join('');
+      $('hroom').dataset.k = cur + g.phase;
+    }
+    $('hroom').disabled = g.phase === 'playing';
+    $('hroom').title = g.phase === 'playing' ? 'Reset rooms to change the game' : '';
+  }
   $('hostgrid').innerHTML = TEAM_KEYS.map(k => {
-    const room = PZ[TEAMS[k].room]; const t = team(k); const ps = playersOf(k);
+    const room = PZ[roomOf(k)]; const t = team(k); const ps = playersOf(k);
     return `<div class="card" style="--team:${TEAMS[k].color}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
       <ul class="people">${ps.map(p => `<li class="${p.on ? 'on' : ''}">${esc(p.name)}</li>`).join('') || '<li>No players</li>'}</ul>
       <ul class="trails" data-trails="${k}"></ul>
@@ -568,7 +595,7 @@ function openModal({ title, msg, table, prompt }, target) {
   $('mcode').hidden = !prompt; $('mok').hidden = !!prompt;
   $('modal').hidden = false;
   if (prompt) {
-    const room = PZ[TEAMS[me().team].room]; const c = room.targets[target].code;
+    const room = PZ[roomOf(me().team)]; const c = room.targets[target].code;
     const inp = $('mcodein');
     inp.value = ''; inp.maxLength = c.len; inp.placeholder = (c.kind === 'digits' ? '0' : 'A').repeat(c.len);
     inp.inputMode = c.kind === 'digits' ? 'numeric' : 'text';
@@ -601,10 +628,19 @@ function normalize(v, kind) { v = String(v || '').toUpperCase(); return kind ===
 
 async function act(type, target, item, value) {
   const m = me(); if (!m) return { msg: '' };
-  const k = m.team; const room = PZ[TEAMS[k].room]; const tg = room.targets[target];
+  const k = m.team; const room = PZ[roomOf(k)]; const tg = room.targets[target];
   if (!tg) return { msg: 'Nothing interesting there.' };
   const g = game();
   if (g.phase !== 'playing') return { msg: 'The game has not started yet.' };
+  if (target === 'door' && !team(k).escapedAt) {
+    const needs = exitNeeds(room); const f = team(k).flags;
+    const have = needs.filter(s => f[s]).length;
+    if (have < needs.length) {
+      return room.trails
+        ? { title: 'Not yet', msg: `The exit won't accept a password until all ${needs.length} clue notes are found. Your team has found ${have} of ${needs.length}. Check the trail list for the ones still missing.` }
+        : { title: 'Not yet', msg: 'The exit won\'t accept a code until your team has found the last clue in this room.' };
+    }
+  }
   let codeOk = false, tried = '';
   if (type === 'code') { tried = normalize(value, tg.code.kind); codeOk = tg.code.hashes.includes(sha256('escape-race|' + tried)); }
   let result = null, events = [], escaped = false;
@@ -645,7 +681,7 @@ async function act(type, target, item, value) {
 // In a room with trails, the player first picks which trail they want a hint for.
 function hintPicker() {
   const m = me(); if (!m) return;
-  const room = PZ[TEAMS[m.team].room];
+  const room = PZ[roomOf(m.team)];
   if (!room.trails) return getHint(null);
   const f = team(m.team).flags;
   openModal({ title: 'Hint', msg: 'Which trail is your group stuck on? Hints are shared, so everyone sees them in the feed.' });
@@ -658,7 +694,7 @@ $('mtable').addEventListener('click', e => { const b = e.target.closest('[data-t
 
 async function getHint(trailId) {
   const m = me(); if (!m) return;
-  const k = m.team; const room = PZ[TEAMS[k].room];
+  const k = m.team; const room = PZ[roomOf(k)];
   let steps = room.steps;
   if (room.trails && trailId === 'exit') steps = ['escaped'];
   else if (room.trails && trailId) steps = room.trails.find(tr => tr.id === trailId).steps;
@@ -676,7 +712,7 @@ async function getHint(trailId) {
   openModal({ title: 'Hint', msg: res });
 }
 
-function wallCount() { const m = me(); return m && TEAMS[m.team] ? PZ[TEAMS[m.team].room].walls.length : 4; }
+function wallCount() { const m = me(); return m && TEAMS[m.team] ? PZ[roomOf(m.team)].walls.length : 4; }
 function goWall(i) { wall = i; store.set('er-wall', wall); selected = null; render(); }
 function turn(d) { const n = wallCount(); goWall((wall + d + n) % n); }
 $('left').onclick = () => turn(-1);
@@ -721,9 +757,16 @@ function confirmHost(kind, label, fn) {
   pending = kind; $('hconfirm').textContent = `Click "${label}" again to confirm.`;
   setTimeout(() => { if (pending === kind) { pending = null; $('hconfirm').textContent = ''; } }, 4000);
 }
-$('hstart').onclick = () => B.set('game', { phase: 'playing', startedAt: B.now(), winner: null });
-$('hreset').onclick = () => confirmHost('reset', 'Reset rooms', () => B.update('', { game: { phase: 'lobby' }, teams: null, feed: null }));
-$('hclear').onclick = () => confirmHost('clear', 'Reset rooms and remove players', () => B.update('', { game: { phase: 'lobby' }, teams: null, feed: null, players: null }));
+// game/room keeps the host's co-op pick across starts and resets
+const lobby = () => ({ phase: 'lobby', room: (DB.game && DB.game.room) || null });
+$('hstart').onclick = () => B.set('game', { phase: 'playing', startedAt: B.now(), winner: null, room: (DB.game && DB.game.room) || null });
+$('hreset').onclick = () => confirmHost('reset', 'Reset rooms', () => B.update('', { game: lobby(), teams: null, feed: null }));
+$('hclear').onclick = () => confirmHost('clear', 'Reset rooms and remove players', () => B.update('', { game: lobby(), teams: null, feed: null, players: null }));
+// Switching the co-op game clears the old game's progress; players stay joined.
+$('hroom').addEventListener('change', e => {
+  if (game().phase === 'playing') { renderHost(); return; }
+  B.update('', { game: { phase: 'lobby', room: e.target.value }, teams: null, feed: null });
+});
 
 // ---------- art ----------
 const PTABLE = '<div class="ptable">' + [['H', 1, 'Hydrogen'], ['He', 2, 'Helium'], ['Li', 3, 'Lithium'], ['Be', 4, 'Beryllium'], ['B', 5, 'Boron'], ['C', 6, 'Carbon'], ['N', 7, 'Nitrogen'], ['O', 8, 'Oxygen'], ['F', 9, 'Fluorine'], ['Ne', 10, 'Neon']]
@@ -923,10 +966,164 @@ Object.assign(ICONS, {
   usb: '<svg viewBox="0 0 40 40"><rect x="10" y="14" width="18" height="12" rx="2" fill="#2c5ea8"/><rect x="28" y="16" width="7" height="8" fill="#c9ccd3"/><circle cx="16" cy="20" r="2" fill="#bfe6f2"/></svg>',
 });
 
+// ---------- The Haunted Mansion ----------
+const MSYM = { // the four symbols, drawn centred on 0,0
+  raven: '<path d="M-12 6q2-12 14-12l5-5 2 5 6 1-6 3q-2 10-14 10z" fill="currentColor"/><circle cx="4" cy="-4" r="1.4" fill="#000"/>',
+  candle: '<rect x="-4" y="-2" width="8" height="14" fill="currentColor"/><path d="M0-12q5 6 0 9q-5-3 0-9z" fill="#ffcc66"/>',
+  moon: '<path d="M3-11a11 11 0 1 0 0 22a8 8 0 1 1 0-22z" fill="currentColor"/>',
+  key: '<circle cx="-6" cy="0" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M-1 0h13M8 0v5M12 0v4" stroke="currentColor" stroke-width="3" fill="none"/>',
+};
+const sym = (name, x, y, color, s) => `<g transform="translate(${x} ${y}) scale(${s || 1})" style="color:${color}">${MSYM[name]}</g>`;
+const mansionNotes = f => PZ.mansion.trails.filter(tr => f[tr.steps[tr.steps.length - 1]]).length;
+
+function mansionBase(opts) {
+  opts = opts || {};
+  let boards = '';
+  for (let x = -40; x < 820; x += 60) boards += `<line x1="${x}" y1="450" x2="${x + 30}" y2="360" stroke="#24170f" stroke-width="2"/>`;
+  const wall = opts.wall || '#33233a', pat = opts.pat || '#43304b';
+  return `<defs><pattern id="damask" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M24 6c7 8 7 14 0 18-7-4-7-10 0-18zM24 42c-7-8-7-14 0-18 7 4 7 10 0 18z" fill="${pat}"/></pattern>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <radialGradient id="candleglow"><stop offset="0" stop-color="#ffd27a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>
+    <rect width="800" height="360" fill="${wall}"/>${opts.plain ? '' : '<rect width="800" height="250" fill="url(#damask)"/>'}
+    ${opts.plain ? '' : '<rect y="250" width="800" height="102" fill="#24171c"/><rect y="250" width="800" height="7" fill="#4a3226"/>' + [0, 1, 2, 3, 4, 5, 6, 7].map(i => `<rect x="${12 + i * 100}" y="270" width="76" height="68" fill="none" stroke="#3a2730" stroke-width="3"/>`).join('')}
+    <rect y="352" width="800" height="10" fill="#1b110c"/><rect y="360" width="800" height="90" fill="#3a2718"/>${boards}`;
+}
+const cobweb = (x, y, flip) => `<path d="M${x} ${y}l${flip ? -60 : 60} 0M${x} ${y}l0 60M${x} ${y}l${flip ? -45 : 45} 45M${x + (flip ? -20 : 20)} ${y}q${flip ? 8 : -8} 12 ${flip ? 20 : -20} 20M${x + (flip ? -40 : 40)} ${y}q${flip ? 16 : -16} 26 ${flip ? 40 : -40} 40" stroke="#bfb6c4" stroke-width="1" fill="none" opacity=".5"/>`;
+const darkness = (lit, label) => lit ? '' : `<g pointer-events="none"><rect width="800" height="450" fill="#020104" opacity=".8"/>${label ? `<text x="400" y="430" text-anchor="middle" fill="#b9a6c9" font-family="JetBrains Mono, monospace" font-size="14">${label}</text>` : ''}</g>`;
+
+SCENES.mansion = [
+  // 0 hall: front door (sealed with chains until all four notes are found) + grandfather clock
+  f => {
+    const all = mansionNotes(f) === 4;
+    const wheels = f.escaped ? 'ROSE' : '????';
+    return mansionBase() + `
+      ${hot('door', `<path d="M290 360V120q110-90 220 0v240z" fill="#2a1a12"/>
+        ${f.escaped ? '<path d="M305 360V126q95-76 190 0v234z" fill="#0d1424"/><circle cx="440" cy="150" r="14" fill="#f1ead0"/><path d="M305 360V126l-40 20v214z" fill="#4a2f20"/>'
+          : `<path d="M305 360V126q95-76 190 0v234z" fill="#4a2f20"/><path d="M400 70v290" stroke="#2a1a12" stroke-width="5"/>
+             ${[0, 1].map(s => `<rect x="${322 + s * 95}" y="150" width="60" height="80" fill="none" stroke="#2f1e15" stroke-width="5"/><rect x="${322 + s * 95}" y="250" width="60" height="90" fill="none" stroke="#2f1e15" stroke-width="5"/>`).join('')}`}
+        ${['raven', 'candle', 'moon', 'key'].map((s, i) => sym(s, 343 + i * 38, 118, '#d9c9a3', .9)).join('')}
+        <rect x="324" y="232" width="152" height="40" rx="5" fill="#1a110c"/>
+        ${wheels.split('').map((c, i) => `<rect x="${331 + i * 37}" y="238" width="28" height="28" fill="#d9c9a3"/><text x="${345 + i * 37}" y="259" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="18" fill="#1a110c">${c}</text>`).join('')}
+        ${all || f.escaped ? '' : `<path d="M300 140L500 340M500 140L300 340" stroke="#8a8f98" stroke-width="9" stroke-dasharray="14 6"/><rect x="384" y="226" width="32" height="28" rx="4" fill="#6d7179" transform="rotate(8 400 240)"/>
+          <text x="400" y="385" text-anchor="middle" fill="#c9b8db" font-family="Figtree, sans-serif" font-size="13">Sealed · ${mansionNotes(f)} of 4 ghost notes found</text>`}`, 'Front door')}
+      ${hot('clock', `<rect x="610" y="90" width="80" height="270" fill="#3d2618"/><rect x="600" y="80" width="100" height="22" fill="#2e1c12"/>
+        <circle cx="650" cy="140" r="28" fill="#e6dcc0"/><path d="M650 140v-22M650 140v-20" stroke="#1a110c" stroke-width="3"/>
+        <rect x="628" y="190" width="44" height="130" fill="#24160e"/><circle cx="650" cy="290" r="12" fill="#c9a24a"/><path d="M650 200v78" stroke="#c9a24a" stroke-width="2"/>`, 'Grandfather clock')}
+      <rect x="110" y="270" width="50" height="90" fill="#2a1d14"/><path d="M118 270l-10-90M135 270l4-100M150 270l14-80" stroke="#1c140f" stroke-width="5"/>
+      ${cobweb(0, 0)}${cobweb(800, 0, true)}`;
+  },
+  // 1 hall: portrait gallery
+  f => {
+    const person = (x, y, dress, hair, small) => `<rect x="${x}" y="${y}" width="130" height="170" fill="#1e1520"/>
+      <path d="M${x + 25} ${y + 170}q40-${small ? 50 : 70} 80 0z" fill="${dress}"/><ellipse cx="${x + 65}" cy="${y + (small ? 85 : 72)}" rx="${small ? 20 : 24}" ry="${small ? 25 : 30}" fill="#d8bfa3"/>
+      <path d="M${x + 40} ${y + (small ? 80 : 64)}q25-${small ? 40 : 45} 50 0" fill="${hair}"/><circle cx="${x + 57}" cy="${y + (small ? 86 : 74)}" r="2.5" fill="#222"/><circle cx="${x + 73}" cy="${y + (small ? 86 : 74)}" r="2.5" fill="#222"/>`;
+    const frame = (x, y) => `<rect x="${x - 12}" y="${y - 12}" width="154" height="194" fill="#a9822f"/><rect x="${x - 5}" y="${y - 5}" width="140" height="180" fill="#6e521c"/>`;
+    const plaque = (x, txt) => `<rect x="${x}" y="300" width="130" height="30" fill="#a9822f"/><text x="${x + 65}" y="319" text-anchor="middle" font-family="Figtree, sans-serif" font-size="10.5" font-weight="700" fill="#2a1d0c">${txt}</text>`;
+    return mansionBase() + `
+      ${hot('portraits', frame(70, 90) + person(70, 90, '#2b3b55', '#3a2a1a') + plaque(70, 'LORD ASHWORTH') + frame(300, 90) + person(300, 90, '#5a2340', '#6a4a2a') + plaque(300, 'LADY ASHWORTH'), 'Portraits of Lord and Lady Ashworth')}
+      ${hot('portrait', `<g ${f.sheet ? 'transform="rotate(5 595 175)"' : ''}>${frame(530, 90)}${person(530, 90, '#e7e2f0', '#c98a3c', true)}</g>
+        ${f.sheet ? '<rect x="540" y="96" width="14" height="168" fill="#120c14" opacity=".6"/>' : ''}${plaque(530, 'ROSE ASHWORTH 1885–1897')}`, 'Portrait of Rose Ashworth')}`;
+  },
+  // 2 library: bookshelf + reading desk with candelabra and diary
+  f => {
+    let books = ''; const cols = ['#5a2a2a', '#2a3a5a', '#3a4a2a', '#4a3a2a', '#2a2a2a', '#5a4a2a'];
+    [0, 1, 2].forEach(r => { let x = 72; for (let i = 0; i < 11; i++) { const w = 20 + ((i * 7 + r * 5) % 4) * 3; const h = 62 + ((i * 3 + r) % 4) * 5; if (!(r === 1 && i === 5)) books += `<rect x="${x}" y="${150 + r * 85 - h}" width="${w}" height="${h}" fill="${cols[(i + r) % 6]}"/>`; else books += `<rect x="${x}" y="${150 + r * 85 - h}" width="${w}" height="${h}" fill="#120a08"/>`; x += w + 3; } });
+    const lit = !!f.candles;
+    return mansionBase() + `
+      <rect x="55" y="40" width="340" height="320" fill="#3a2414"/><rect x="65" y="50" width="320" height="300" fill="#1c120c"/>
+      ${[150, 235, 320].map(y => `<rect x="65" y="${y}" width="320" height="10" fill="#3a2414"/>`).join('')}${books}
+      ${hot('book', f.book ? '<rect x="188" y="168" width="24" height="66" fill="#8b1e1e" transform="rotate(-8 200 200)"/><rect x="184" y="214" width="34" height="8" fill="#8b1e1e"/>'
+        : '<rect x="193" y="168" width="24" height="67" fill="#8b1e1e"/><rect x="193" y="168" width="24" height="8" fill="#b13030"/><rect x="190" y="200" width="30" height="5" fill="#d9c9a3"/>', 'Loose red book')}
+      ${lit ? '<circle cx="610" cy="200" r="190" fill="url(#candleglow)"/>' : ''}
+      <rect x="460" y="262" width="300" height="16" fill="#4a2c18"/><rect x="475" y="278" width="14" height="82" fill="#3a2414"/><rect x="730" y="278" width="14" height="82" fill="#3a2414"/>
+      ${hot('candles', `<path d="M650 262v-60M620 222h60M620 222v-12M650 202v-10M680 222v-12" stroke="#c9a24a" stroke-width="5" fill="none"/>
+        ${[[620, 192], [650, 172], [680, 192]].map(([x, y]) => `<rect x="${x - 4}" y="${y}" width="8" height="18" fill="#efe6d2"/>${lit ? `<path d="M${x} ${y - 14}q6 7 0 12q-6-5 0-12z" fill="#ffcc66" filter="url(#glow)"/>` : ''}`).join('')}`, 'Candelabra')}
+      ${hot('diary', `<path d="M510 258l50-8 50 8v6h-100z" fill="#5a1f2a"/><path d="M515 256l45-6v8z" fill="#efe6d2"/><path d="M560 250l45 6-45 2z" fill="#e2d7bf"/>`, 'Diary')}
+      ${lit ? '' : '<rect x="440" y="150" width="340" height="140" fill="#020104" opacity=".45" pointer-events="none"/>'}`;
+  },
+  // 3 library: fireplace with the iron box, raven painting above
+  f => mansionBase() + `
+    <rect x="300" y="40" width="200" height="130" fill="#a9822f"/><rect x="310" y="50" width="180" height="110" fill="#2b3040"/>
+    ${sym('raven', 400, 108, '#0d0d10', 3.2)}<circle cx="455" cy="75" r="10" fill="#e9e2c8" opacity=".8"/>
+    <rect x="230" y="180" width="340" height="22" fill="#5d5550"/>
+    <rect x="250" y="202" width="300" height="158" fill="#6d6560"/><path d="M290 360V250q110-60 220 0v110z" fill="#120b08"/>
+    ${[0, 1, 2, 3, 4].map(i => `<rect x="${250 + (i % 2) * 150}" y="${210 + i * 28}" width="${i % 2 ? 150 : 40}" height="3" fill="#5a5250"/>`).join('')}
+    <path d="M320 352h160" stroke="#3a3a3a" stroke-width="6"/>
+    ${hot('ironbox', f.ironbox
+      ? '<rect x="360" y="312" width="80" height="38" fill="#3b3e44"/><polygon points="360,312 440,312 450,286 370,286" fill="#4b4f56"/>'
+      : '<rect x="360" y="306" width="80" height="44" fill="#3b3e44"/><rect x="360" y="306" width="80" height="8" fill="#4b4f56"/><rect x="394" y="322" width="12" height="12" fill="#c9ccd3"/><circle cx="400" cy="328" r="2" fill="#222"/>', 'Iron box in the grate')}
+    <path d="M610 360v-90q0-40 50-40t50 40v90z" fill="#4a1f2a"/><rect x="600" y="300" width="120" height="30" fill="#5a2a35"/>`,
+  // 4 parlour: piano and moonlit window
+  f => mansionBase() + `
+    <rect x="40" y="60" width="140" height="180" fill="#0c1428"/><circle cx="130" cy="110" r="22" fill="#e9e2c8"/><circle cx="140" cy="104" r="20" fill="#0c1428"/>
+    <path d="M110 60v180M40 150h140" stroke="#2a1a12" stroke-width="6"/><path d="M30 50q30 100 0 210h25q15-110-5-210z" fill="#5a1f2a"/><path d="M190 50q-30 100 0 210h-25q-15-110 5-210z" fill="#5a1f2a"/>
+    ${hot('piano', `<rect x="240" y="150" width="340" height="210" fill="#140e0c"/><rect x="240" y="150" width="340" height="16" fill="#2a1d18"/>
+      <rect x="250" y="240" width="320" height="34" fill="#efe6d2"/>${Array.from({ length: 20 }, (_, i) => `<path d="M${250 + i * 16} 240v34" stroke="#888" stroke-width="1"/>`).join('')}
+      ${Array.from({ length: 19 }, (_, i) => [1, 2, 4, 5, 6].includes(i % 7) ? `<rect x="${262 + i * 16}" y="240" width="9" height="20" fill="#111"/>` : '').join('')}
+      <rect x="250" y="274" width="320" height="86" fill="#1c1412"/><rect x="330" y="186" width="160" height="50" fill="#2a1d18"/>
+      ${f.melody ? '<rect x="345" y="170" width="130" height="60" fill="#efe6d2"/><text x="410" y="196" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#2a1d0c">3:A 1:B</text><text x="410" y="216" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#2a1d0c">4:D 2:E</text>' : ''}
+      ${f.piano ? '<polygon points="240,150 580,150 560,110 260,110" fill="#2a1d18"/>' : ''}`, 'Piano')}
+    <ellipse cx="410" cy="410" rx="220" ry="26" fill="#3a1a2a"/>${cobweb(800, 0, true)}`,
+  // 5 kitchen: stove with cauldron, cookbook shelf, lantern hook
+  f => mansionBase({ wall: '#3a3328', pat: '#463e30', plain: false }) + `
+    <rect x="50" y="120" width="260" height="12" fill="#4a2c18"/>
+    ${[70, 100, 130].map((x, i) => `<rect x="${x}" y="${84 - i * 4}" width="22" height="${36 + i * 4}" rx="3" fill="${['#6a8a5a', '#8a5a3a', '#5a6a8a'][i]}"/>`).join('')}
+    ${hot('cookbook', '<rect x="200" y="72" width="26" height="48" fill="#7a2a1a"/><rect x="228" y="78" width="22" height="42" fill="#3a4a2a"/><rect x="204" y="86" width="18" height="4" fill="#d9c9a3"/>', 'Cookbook')}
+    <rect x="360" y="230" width="280" height="130" fill="#1e1e22"/><rect x="350" y="222" width="300" height="12" fill="#2c2c32"/>
+    <rect x="390" y="270" width="90" height="70" fill="#121214"/><rect x="520" y="270" width="90" height="70" fill="#121214"/><rect x="400" y="320" width="70" height="12" fill="${f.brew ? '#ff8a3a' : '#3a1a0a'}"/>
+    ${hot('cauldron', `<path d="M430 222q0-70 70-70t70 70z" fill="#2a2a2e"/><ellipse cx="500" cy="152" rx="70" ry="12" fill="${f.brew ? '#5ad17a' : '#1a1a1e'}"/>
+      ${f.brew ? '<path d="M470 140q-10-30 10-50q20-20 0-40M520 140q10-30-10-50q-20-20 0-40" stroke="#9de0b0" stroke-width="6" fill="none" opacity=".6"/>' : ''}
+      ${[['#b13030', 300], ['#3c9c50', 320], ['#2f5da8', 340]].map(([c, x]) => `<rect x="${x}" y="190" width="14" height="32" rx="3" fill="${c}"/><rect x="${x + 4}" y="182" width="6" height="8" fill="#ccc"/>`).join('')}`, 'Cauldron')}
+    ${hot('lanternhook', `<path d="M700 60v30" stroke="#555" stroke-width="3"/><path d="M690 90q10-10 20 0" stroke="#555" stroke-width="3" fill="none"/>
+      ${f.lantern ? '' : '<rect x="684" y="96" width="32" height="44" rx="4" fill="#a9822f"/><rect x="690" y="102" width="20" height="32" fill="#e8dcc0" opacity=".7"/><rect x="680" y="140" width="40" height="6" fill="#7a5c20"/><rect x="694" y="106" width="4" height="22" fill="#fff" opacity=".6"/>'}`, 'Lantern hook')}`,
+  // 6 attic: dark until the lantern is used; trunk and rocking chair
+  f => {
+    const lit = !!f.light;
+    return mansionBase({ wall: '#3b2c22', plain: true }) + `
+      <polygon points="0,0 400,0 0,200" fill="#2a1e16"/><polygon points="800,0 400,0 800,200" fill="#2a1e16"/>
+      ${[80, 200, 320].map(x => `<path d="M${x} 0L${x - 80} 360" stroke="#1e140e" stroke-width="10"/><path d="M${800 - x} 0L${880 - x} 360" stroke="#1e140e" stroke-width="10"/>`).join('')}
+      <circle cx="400" cy="110" r="46" fill="#0c1428"/><path d="M400 64v92M354 110h92" stroke="#2a1e16" stroke-width="6"/>
+      ${hot('chair', '<path d="M150 360q40 14 120 0M170 352v-120M250 352v-120M170 232h80M170 262h80M170 300h90v14h-90z" stroke="#4a3020" stroke-width="7" fill="none"/>', 'Rocking chair')}
+      ${hot('trunk', `<rect x="460" y="285" width="220" height="75" fill="#5a3a22"/><path d="M460 300h220M460 340h220" stroke="#3a2414" stroke-width="4"/>
+        ${f.trunk ? '<polygon points="460,285 680,285 660,230 480,230" fill="#6a4a2a"/><rect x="480" y="262" width="180" height="22" fill="#d9c9e8"/>' : '<path d="M460 285q110-40 220 0" fill="#6a4a2a"/><rect x="560" y="290" width="20" height="24" fill="#c9a24a"/>'}
+        <text x="570" y="352" text-anchor="middle" font-family="Big Shoulders Display, Impact, sans-serif" font-weight="800" font-size="18" fill="#d9c9a3">R.A.</text>`, 'Trunk')}
+      ${lit ? '<circle cx="420" cy="330" r="160" fill="url(#candleglow)" pointer-events="none"/><rect x="400" y="330" width="22" height="30" rx="3" fill="#3a3a40"/><rect x="404" y="334" width="14" height="20" fill="#ffd27a"/>' : ''}
+      ${cobweb(0, 0)}${cobweb(800, 0, true)}${darkness(lit, 'PITCH BLACK · BRING A LIGHT')}`;
+  },
+  // 7 cellar: crate with the ladle, lamp-oil barrel, wine rack
+  f => {
+    let stones = '';
+    for (let r = 0; r < 9; r++) for (let c = 0; c < 11; c++) stones += `<rect x="${c * 76 + (r % 2) * 38 - 30}" y="${r * 40}" width="72" height="36" rx="5" fill="#45403d"/>`;
+    return `<defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+      <rect width="800" height="360" fill="#2a2624"/>${stones}<rect y="360" width="800" height="90" fill="#2e2a26"/><rect y="352" width="800" height="10" fill="#1c1916"/>
+      ${hot('winerack', `<rect x="40" y="120" width="220" height="240" fill="#3a2414"/>${[0, 1, 2, 3, 4].map(r => [0, 1, 2, 3].map(c => `<circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="16" fill="#1a0e10"/><circle cx="${70 + c * 52}" cy="${145 + r * 46}" r="7" fill="#4a1a2a"/>`).join('')).join('')}`, 'Wine rack')}
+      ${hot('crate', `<rect x="320" y="280" width="140" height="80" fill="#7a5a32"/><path d="M320 300h140M320 340h140M330 280l120 80" stroke="#5a4022" stroke-width="5"/>
+        ${f.ladle ? '' : '<path d="M440 286l40-60" stroke="#55595f" stroke-width="5"/><ellipse cx="482" cy="222" rx="10" ry="7" fill="#55595f"/>'}<path d="M325 282q20-12 40 0t40 0 40 0" stroke="#d9c07a" stroke-width="4" fill="none"/>`, 'Old crate')}
+      ${hot('barrel', `<ellipse cx="640" cy="360" rx="80" ry="14" fill="#1c1410"/><path d="M570 360q-14-80 0-160h140q14 80 0 160z" fill="#6a4426"/><ellipse cx="640" cy="200" rx="70" ry="13" fill="#5a3a20"/>
+        ${[230, 300, 345].map(y => `<path d="M565 ${y}h150" stroke="#3a3a3a" stroke-width="5"/>`).join('')}<rect x="600" y="250" width="80" height="30" fill="#d9c9a3"/><text x="640" y="270" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="12" fill="#3a2414">LAMP OIL</text>`, 'Lamp-oil barrel')}
+      ${cobweb(0, 0)}${cobweb(800, 0, true)}<rect width="800" height="450" fill="#000" opacity=".25" pointer-events="none"/>`;
+  },
+];
+
+Object.assign(ICONS, {
+  silverkey: '<svg viewBox="0 0 40 40"><circle cx="13" cy="20" r="7" fill="none" stroke="#c9ccd3" stroke-width="4"/><path d="M20 20h15M30 20v6M35 20v5" stroke="#c9ccd3" stroke-width="4" fill="none"/></svg>',
+  matches: '<svg viewBox="0 0 40 40"><rect x="8" y="14" width="24" height="16" fill="#b13030"/><rect x="8" y="14" width="24" height="5" fill="#e8d9b0"/><path d="M14 14l8-10" stroke="#e8d9b0" stroke-width="2"/><circle cx="22" cy="4" r="2.5" fill="#d0443a"/></svg>',
+  sheet: '<svg viewBox="0 0 40 40"><rect x="8" y="6" width="24" height="28" fill="#efe6d2"/><path d="M11 13h18M11 18h18M11 23h18M11 28h18" stroke="#8a8170" stroke-width="1"/><circle cx="16" cy="18" r="2.5" fill="#222"/><circle cx="24" cy="23" r="2.5" fill="#222"/></svg>',
+  ladle: '<svg viewBox="0 0 40 40"><path d="M10 8l14 18" stroke="#8a8f98" stroke-width="3"/><ellipse cx="27" cy="29" rx="8" ry="6" fill="#8a8f98"/></svg>',
+  lantern: '<svg viewBox="0 0 40 40"><rect x="13" y="10" width="14" height="22" rx="2" fill="#3a3a40"/><rect x="16" y="14" width="8" height="14" fill="#9aa0a8" opacity=".5"/><path d="M15 10q5-7 10 0" stroke="#555" stroke-width="2" fill="none"/></svg>',
+  lanternlit: '<svg viewBox="0 0 40 40"><circle cx="20" cy="21" r="14" fill="#ffd27a" opacity=".3"/><rect x="13" y="10" width="14" height="22" rx="2" fill="#3a3a40"/><rect x="16" y="14" width="8" height="14" fill="#ffd27a"/><path d="M15 10q5-7 10 0" stroke="#555" stroke-width="2" fill="none"/></svg>',
+  note_candle: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.7)" style="color:#5a3a22">' + MSYM.candle + '</g><text x="26" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">O</text></svg>',
+  note_key: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.55)" style="color:#5a3a22">' + MSYM.key + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">E</text></svg>',
+  note_raven: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.55)" style="color:#2a1d0c">' + MSYM.raven + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">R</text></svg>',
+  note_moon: '<svg viewBox="0 0 40 40"><rect x="7" y="5" width="26" height="30" fill="#e9dfc7"/><g transform="translate(15 20) scale(.6)" style="color:#5a3a22">' + MSYM.moon + '</g><text x="27" y="25" text-anchor="middle" font-family="serif" font-weight="700" font-size="12" fill="#2a1d0c">S</text></svg>',
+});
+
 // ---------- boot ----------
 async function boot() {
   try {
-    B = window.FIREBASE_CONFIG ? await firebaseBackend(window.FIREBASE_CONFIG) : localBackend();
+    // add ?demo to the link to practise or test in this browser only, without touching the live game
+    const forceDemo = new URLSearchParams(location.search).has('demo');
+    B = window.FIREBASE_CONFIG && !forceDemo ? await firebaseBackend(window.FIREBASE_CONFIG) : localBackend();
   } catch (err) { showError(err); return; }
   const w = parseInt(store.get('er-wall'), 10); if (w >= 0 && w < 8) wall = w;
   B.subscribe(db => { DB = db || {}; render(); });

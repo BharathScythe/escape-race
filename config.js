@@ -19,5 +19,8 @@ window.HOST_KEY = 'host-966ac032';
 // 'race' = two teams race through two different rooms; the first team out wins.
 window.GAME_MODE = 'coop';
 
+// The co-op game shown until the host picks one on the host page: 'mansion' or 'building'.
+window.COOP_ROOM = 'mansion';
+
 // Game name shown at the top.
 window.GAME_NAME = 'Escape Race';
