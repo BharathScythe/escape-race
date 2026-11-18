@@ -253,22 +253,34 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 (function () {
 'use strict';
 const PZ = window.PUZZLES;
-// GAME_MODE in config.js: 'coop' = everyone in one big building; 'race' = two teams, two rooms.
-const MODE = window.GAME_MODE === 'race' ? 'race' : 'coop';
-const TEAMS = MODE === 'race' ? {
-  A: { name: 'Team Office', room: 'office', color: 'var(--office)' },
-  B: { name: 'Team Lab', room: 'lab', color: 'var(--lab)' },
-} : {
-  C: { name: 'Everyone', room: null, color: 'var(--office)' },   // room: the host's pick, see roomOf
+// The host picks the game on the host page (stored as game/mode and game/room);
+// GAME_MODE and COOP_ROOM in config.js are only the defaults before the host picks.
+const TEAMS = {
+  A: { name: 'Team Office', room: 'office', color: 'var(--office)' },   // race
+  B: { name: 'Team Lab', room: 'lab', color: 'var(--lab)' },            // race
+  C: { name: 'Everyone', room: null, color: 'var(--office)' },          // co-op: room is the host's pick
 };
-const TEAM_KEYS = Object.keys(TEAMS);
-// Co-op games the host can choose between on the host page.
-const COOP_ROOMS = ['building', 'mansion'];
+// Every game the host can choose, in menu order. 'race' is the two-team game.
+const GAMES = [
+  { id: 'coop:mansion', label: 'The Haunted Mansion · everyone together' },
+  { id: 'coop:building', label: 'The Locked Building · everyone together' },
+  { id: 'race', label: 'Team race · Manager\'s Office vs Secret Lab' },
+  { id: 'coop:office', label: 'The Manager\'s Office · everyone together (small)' },
+  { id: 'coop:lab', label: 'The Secret Lab · everyone together (small)' },
+];
+const COOP_ROOMS = ['mansion', 'building', 'office', 'lab'];
+const mode = () => {
+  const m = DB.game && DB.game.mode;
+  return m === 'race' || m === 'coop' ? m : (window.GAME_MODE === 'race' ? 'race' : 'coop');
+};
+const teamKeys = () => mode() === 'race' ? ['A', 'B'] : ['C'];
+const inGame = k => teamKeys().includes(k);
 const roomOf = k => {
-  if (TEAMS[k] && TEAMS[k].room) return TEAMS[k].room;
+  if (k !== 'C') return TEAMS[k].room;
   const r = DB.game && DB.game.room;
-  return COOP_ROOMS.includes(r) ? r : (COOP_ROOMS.includes(window.COOP_ROOM) ? window.COOP_ROOM : 'building');
+  return COOP_ROOMS.includes(r) ? r : (COOP_ROOMS.includes(window.COOP_ROOM) ? window.COOP_ROOM : 'mansion');
 };
+const currentGame = () => mode() === 'race' ? 'race' : 'coop:' + roomOf('C');
 const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker',
   piano: 'piano', cauldron: 'cauldron', trunk: 'trunk' };
 const maxHints = k => PZ[roomOf(k)].maxHints || 3;
@@ -395,7 +407,7 @@ function render() {
   renderBanner();
   if (isHost) { $('host').hidden = false; $('join').hidden = true; $('game').hidden = true; renderHost(); return; }
   const m = me();
-  if (!m || !TEAMS[m.team]) { $('join').hidden = false; $('game').hidden = true; renderJoin(); return; }
+  if (!m || !inGame(m.team)) { $('join').hidden = false; $('game').hidden = true; renderJoin(); return; }
   if (!presenceOn) { presenceOn = true; B.presence(pid); }
   $('join').hidden = true; $('game').hidden = false;
   document.documentElement.style.setProperty('--team', TEAMS[m.team].color);
@@ -414,10 +426,10 @@ function render() {
 
 function renderBoard() {
   const m = me(); const g = game();
-  $('board').innerHTML = TEAM_KEYS.map(k => {
+  $('board').innerHTML = teamKeys().map(k => {
     const t = team(k); const room = PZ[roomOf(k)]; const p = progress(k); const n = playersOf(k).length;
     let st = `${p}/${room.steps.length} steps · ${n} player${n === 1 ? '' : 's'}`, cls = '';
-    if (t.escapedAt) { st = (MODE === 'race' ? (g.winner === k ? 'WINNER · ' : 'Escaped · ') : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
+    if (t.escapedAt) { st = (mode() === 'race' ? (g.winner === k ? 'WINNER · ' : 'Escaped · ') : 'Escaped · ') + fmt(t.escapedAt); cls = 'win'; }
     return `<div class="chip${m && m.team === k ? ' mine' : ''}" style="--c:${TEAMS[k].color}"><div class="row"><span class="nm">${TEAMS[k].name}</span><span class="st ${cls}">${st}</span></div><div class="bar"><i style="width:${(p / room.steps.length) * 100}%"></i></div></div>`;
   }).join('');
   tick();
@@ -425,8 +437,8 @@ function renderBoard() {
 
 function renderBanner() {
   const g = game(); const m = me(); const el = $('banner');
-  if (MODE === 'coop') {
-    const k = TEAM_KEYS[0]; const t = team(k);
+  if (mode() === 'coop') {
+    const k = teamKeys()[0]; const t = team(k);
     if (t.escapedAt) { el.textContent = `Everyone escaped in ${fmt(t.escapedAt)}!`; el.hidden = false; } else el.hidden = true;
     return;
   }
@@ -486,19 +498,22 @@ function renderTrails(el, k) {
 function tick() {
   const m = me(); const g = game();
   let ms = 0;
-  if (m && TEAMS[m.team]) ms = elapsedFor(m.team);
+  if (m && inGame(m.team)) ms = elapsedFor(m.team);
   else if (g.phase === 'playing' && g.startedAt) ms = B.now() - g.startedAt;
   $('clock').textContent = fmt(ms);
 }
 
 function renderJoin() {
-  if (MODE === 'coop') {
+  if (mode() === 'coop') {
     $('jointitle').textContent = 'Join the escape';
-    $('joinintro').textContent = 'Everyone is locked in together. Split up and explore: whatever anyone finds lands in everyone\'s bag, and the chat keeps you all talking. The exit only opens once all four clue notes are found.';
+    $('joinintro').textContent = 'Everyone is locked in together. Split up and explore: whatever anyone finds lands in everyone\'s bag, and the chat keeps you all talking. The exit only opens once every clue is found.';
+  } else {
+    $('jointitle').textContent = 'Pick your team';
+    $('joinintro').textContent = 'Two teams, two rooms, one race. Everyone on a team shares the same room: when a teammate finds something, it lands in your bag too. The first team out wins.';
   }
-  $('teampicks').innerHTML = TEAM_KEYS.map(k => {
+  $('teampicks').innerHTML = teamKeys().map(k => {
     const ps = playersOf(k); const room = PZ[roomOf(k)];
-    const label = MODE === 'coop' ? 'Join the game' : TEAMS[k].name;
+    const label = mode() === 'coop' ? 'Join the game' : TEAMS[k].name;
     return `<button class="teampick" style="--c:${TEAMS[k].color}" data-team="${k}"><span class="nm">${label}</span><span class="rm">${esc(room.title)}</span><span class="who">${ps.length ? ps.length + ' joined: ' + ps.map(p => esc(p.name)).join(', ') : 'No one yet'}</span></button>`;
   }).join('');
   if (!$('name').value) $('name').value = store.get('er-name') || '';
@@ -544,11 +559,11 @@ function renderScene(k) {
   const veil = $('veil');
   if (g.phase !== 'playing' && !t.escapedAt) {
     const n = playersOf(k).length;
-    veil.innerHTML = `<div><h2>Get ready</h2><p>${esc(PZ[room].intro)}</p><p style="margin-top:10px">Waiting for the host to start the game. ${n} ${MODE === 'coop' ? (n === 1 ? 'player' : 'players') + ' in the building' : 'on your team'} so far.</p></div>`;
+    veil.innerHTML = `<div><h2>Get ready</h2><p>${esc(PZ[room].intro)}</p><p style="margin-top:10px">Waiting for the host to start the game. ${n} ${mode() === 'coop' ? (n === 1 ? 'player' : 'players') + ' joined' : 'on your team'} so far.</p></div>`;
     veil.hidden = false;
   } else if (t.escapedAt) {
     const won = g.winner === k;
-    veil.innerHTML = MODE === 'coop'
+    veil.innerHTML = mode() === 'coop'
       ? `<div><h2>You escaped!</h2><p>Everyone got out in <b>${fmt(t.escapedAt)}</b>.</p></div>`
       : `<div><h2>${won ? 'You won!' : 'You escaped'}</h2><p>Your team got out in <b>${fmt(t.escapedAt)}</b>${won ? ', first of both teams.' : '.'}</p></div>`;
     veil.hidden = false;
@@ -560,17 +575,15 @@ function renderHost() {
   const g = game();
   $('hstart').textContent = g.phase === 'playing' ? 'Game running' : 'Start game';
   $('hstart').disabled = g.phase === 'playing';
-  if (MODE === 'coop') {
-    $('hroomwrap').hidden = false;
-    const cur = roomOf(TEAM_KEYS[0]);
-    if ($('hroom').dataset.k !== cur + g.phase) {
-      $('hroom').innerHTML = COOP_ROOMS.map(r => `<option value="${r}"${r === cur ? ' selected' : ''}>${esc(PZ[r].title)}</option>`).join('');
-      $('hroom').dataset.k = cur + g.phase;
-    }
-    $('hroom').disabled = g.phase === 'playing';
-    $('hroom').title = g.phase === 'playing' ? 'Reset rooms to change the game' : '';
+  $('hroomwrap').hidden = false;
+  const cur = currentGame();
+  if ($('hroom').dataset.k !== cur + g.phase) {
+    $('hroom').innerHTML = GAMES.map(gm => `<option value="${gm.id}"${gm.id === cur ? ' selected' : ''}>${esc(gm.label)}</option>`).join('');
+    $('hroom').dataset.k = cur + g.phase;
   }
-  $('hostgrid').innerHTML = TEAM_KEYS.map(k => {
+  $('hroom').disabled = g.phase === 'playing';
+  $('hroom').title = g.phase === 'playing' ? 'Reset rooms to change the game' : '';
+  $('hostgrid').innerHTML = teamKeys().map(k => {
     const room = PZ[roomOf(k)]; const t = team(k); const ps = playersOf(k);
     return `<div class="card" style="--team:${TEAMS[k].color}"><h3>${TEAMS[k].name}</h3><p>${esc(room.title)} · ${progress(k)}/${room.steps.length} steps · ${Object.keys(t.hints).length} hints${t.escapedAt ? ' · escaped in ' + fmt(t.escapedAt) : ''}</p>
       <ul class="people">${ps.map(p => `<li class="${p.on ? 'on' : ''}">${esc(p.name)}</li>`).join('') || '<li>No players</li>'}</ul>
@@ -712,7 +725,7 @@ async function getHint(trailId) {
   openModal({ title: 'Hint', msg: res });
 }
 
-function wallCount() { const m = me(); return m && TEAMS[m.team] ? PZ[roomOf(m.team)].walls.length : 4; }
+function wallCount() { const m = me(); return m && inGame(m.team) ? PZ[roomOf(m.team)].walls.length : 4; }
 function goWall(i) { wall = i; store.set('er-wall', wall); selected = null; render(); }
 function turn(d) { const n = wallCount(); goWall((wall + d + n) % n); }
 $('left').onclick = () => turn(-1);
@@ -757,15 +770,21 @@ function confirmHost(kind, label, fn) {
   pending = kind; $('hconfirm').textContent = `Click "${label}" again to confirm.`;
   setTimeout(() => { if (pending === kind) { pending = null; $('hconfirm').textContent = ''; } }, 4000);
 }
-// game/room keeps the host's co-op pick across starts and resets
-const lobby = () => ({ phase: 'lobby', room: (DB.game && DB.game.room) || null });
-$('hstart').onclick = () => B.set('game', { phase: 'playing', startedAt: B.now(), winner: null, room: (DB.game && DB.game.room) || null });
+// game/mode and game/room keep the host's pick across starts and resets
+const picked = () => ({ mode: mode(), room: mode() === 'coop' ? roomOf('C') : null });
+const lobby = () => Object.assign({ phase: 'lobby' }, picked());
+$('hstart').onclick = () => B.set('game', Object.assign({ phase: 'playing', startedAt: B.now(), winner: null }, picked()));
 $('hreset').onclick = () => confirmHost('reset', 'Reset rooms', () => B.update('', { game: lobby(), teams: null, feed: null }));
 $('hclear').onclick = () => confirmHost('clear', 'Reset rooms and remove players', () => B.update('', { game: lobby(), teams: null, feed: null, players: null }));
-// Switching the co-op game clears the old game's progress; players stay joined.
+// Switching the game clears the old game's progress. Players stay joined: for a co-op game
+// everyone moves into it; for the race, players pick a team on their next look at the page.
 $('hroom').addEventListener('change', e => {
   if (game().phase === 'playing') { renderHost(); return; }
-  B.update('', { game: { phase: 'lobby', room: e.target.value }, teams: null, feed: null });
+  const v = e.target.value;
+  const next = v === 'race' ? { phase: 'lobby', mode: 'race', room: null } : { phase: 'lobby', mode: 'coop', room: v.split(':')[1] };
+  const upd = { game: next, teams: null, feed: null };
+  if (next.mode === 'coop') Object.keys(DB.players || {}).forEach(id => { upd['players/' + id + '/team'] = 'C'; });
+  B.update('', upd);
 });
 
 // ---------- art ----------

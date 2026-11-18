@@ -1,10 +1,22 @@
 # Escape Race
 
-A multiplayer escape room, hosted free on GitHub Pages. It has two modes, set by `GAME_MODE` in `config.js`.
+A multiplayer escape room, hosted free on GitHub Pages.
 
-**Co-op (`'coop'`, the default): everyone together, up to about 20 players**
+**The host chooses the game** from the **Game** menu on the host page, before clicking Start game:
 
-The host picks the game on the host page before starting (`COOP_ROOM` in `config.js` sets the default):
+| Game | Players |
+|---|---|
+| The Haunted Mansion | everyone together, up to about 20 |
+| The Locked Building | everyone together, up to about 20 |
+| Team race: Manager's Office vs Secret Lab | two teams, first team out wins |
+| The Manager's Office | everyone together, small group |
+| The Secret Lab | everyone together, small group |
+
+Switching games clears the old game's progress but keeps the players. For an everyone-together
+game they move in automatically; for the race they pick a team. `GAME_MODE` and `COOP_ROOM` in
+`config.js` only set what shows before the host picks.
+
+**Everyone together: the two big games**
 - *The Haunted Mansion*: hall, portrait gallery, library, fireplace, parlour, kitchen, attic and
   cellar. Four trails (Diary, Piano, Potion, Attic) each end in one of the ghost's notes: a symbol
   beside a letter. The symbols carved on the front door put the letters in order to spell her name.
