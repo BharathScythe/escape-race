@@ -247,8 +247,10 @@ input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px;
 </div>
 
 <!-- Bump ?v= after editing config.js or puzzles.js so players' browsers fetch the new copy. -->
-<script src="config.js?v=5"></script>
-<script src="puzzles.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="puzzles.js?v=6"></script>
+<script src="themes.js?v=6"></script>
+<script src="themes-art.js?v=6"></script>
 <script>
 (function () {
 'use strict';
@@ -269,8 +271,17 @@ const GAMES = [
   { id: 'coop:mansion_hard', label: 'The Haunted Mansion · Hard (5 trails)' },
   { id: 'coop:building', label: 'The Locked Building · Normal (4 trails)' },
   { id: 'coop:building_hard', label: 'The Locked Building · Hard (5 trails)' },
+  { id: 'coop:museum', label: 'The Museum · Normal (4 trails)' },
+  { id: 'coop:museum_hard', label: 'The Museum · Hard (5 trails)' },
+  { id: 'coop:ship', label: 'The Spaceship · Normal (4 trails)' },
+  { id: 'coop:ship_hard', label: 'The Spaceship · Hard (5 trails)' },
+  { id: 'coop:pirate', label: 'The Pirate Ship · Normal (4 trails)' },
+  { id: 'coop:pirate_hard', label: 'The Pirate Ship · Hard (5 trails)' },
+  { id: 'coop:temple', label: 'The Temple · Normal (4 trails)' },
+  { id: 'coop:temple_hard', label: 'The Temple · Hard (5 trails)' },
 ];
-const COOP_ROOMS = ['mansion', 'mansion_hard', 'building', 'building_hard', 'office', 'lab'];
+const COOP_ROOMS = ['mansion', 'mansion_hard', 'building', 'building_hard', 'museum', 'museum_hard', 'ship', 'ship_hard',
+  'pirate', 'pirate_hard', 'temple', 'temple_hard', 'office', 'lab'];
 const isBuilding = r => String(r).startsWith('building');
 const isHardRoom = r => String(r).endsWith('_hard');
 const mode = () => {
@@ -286,7 +297,9 @@ const roomOf = k => {
 };
 const currentGame = () => mode() === 'race' ? 'race' : 'coop:' + roomOf('C');
 const LABELS = { door: 'exit door', computer: 'computer', cabinet: 'filing cabinet', fridge: 'sample fridge', certificate: 'wall safe', locker: 'storage locker',
-  piano: 'piano', cauldron: 'cauldron', trunk: 'trunk', diary: 'diary clasp', ouija: 'spirit board', reader: 'badge reader' };
+  piano: 'piano', cauldron: 'cauldron', trunk: 'trunk', diary: 'diary clasp', ouija: 'spirit board', reader: 'badge reader',
+  sarcophagus: 'sarcophagus', plinth: 'plinth', skeleton: 'T-rex panel', keycabinet: 'key cabinet', reactor: 'reactor', nav: 'navigation screen',
+  crewlocker: 'locker', relay: 'distress relay', chest: 'chest', globe: 'globe', bell: 'bell', sundial: 'sundial', plates: 'pressure plates', levers: 'levers' };
 const maxHints = k => PZ[roomOf(k)].maxHints || 3;
 // The rule: the exit takes no password until every clue is found. In a room with trails
 // that means each trail's final step (the notes); other rooms list theirs in exitNeeds.
@@ -494,7 +507,7 @@ function renderTrails(el, k) {
   const f = team(k).flags;
   el.hidden = false;
   el.innerHTML = room.trails.map(tr => {
-    const d = tr.steps.filter(s => f[s]).length; const all = d === tr.steps.length;
+    const d = tr.steps.filter(s => f[s]).length; const all = !!f[tr.steps[tr.steps.length - 1]];   // the note is found
     return `<li style="--c:${tr.color}"><span class="tn">${esc(tr.name)}</span><span class="tp${all ? ' ok' : ''}">${all ? room.items[tr.item].name + ' found' : d + '/' + tr.steps.length}</span><span class="bar"><i style="width:${(d / tr.steps.length) * 100}%"></i></span></li>`;
   }).join('');
 }
@@ -540,11 +553,18 @@ function renderFeed(el, k) {
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
 
+// An item's picture; notes and tablets share the paper one; anything else gets a lettered token.
+function itemIcon(id, name) {
+  if (ICONS[id]) return ICONS[id];
+  if (/^(note|tablet)/.test(id)) return ICONS.memo;
+  return `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="#3a3f4c" stroke="#9ba0ad" stroke-width="2"/><text x="20" y="26" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="700" font-size="15" fill="#ecebe6">${esc(String(name).charAt(0))}</text></svg>`;
+}
+
 function renderBag(k) {
   const room = PZ[roomOf(k)]; const inv = team(k).inv;
   const ids = Object.keys(inv).filter(id => room.items[id]).sort((a, b) => inv[a] - inv[b]);
   if (selected && !inv[selected]) selected = null;
-  $('items').innerHTML = ids.length ? ids.map(id => `<button class="item" data-item="${id}" aria-pressed="${selected === id}">${ICONS[id] || ''}<span>${esc(room.items[id].name)}</span></button>`).join('')
+  $('items').innerHTML = ids.length ? ids.map(id => `<button class="item" data-item="${id}" aria-pressed="${selected === id}">${itemIcon(id, room.items[id].name)}<span>${esc(room.items[id].name)}</span></button>`).join('')
     : '<p class="empty">Empty. Anything your team finds appears here for everyone.</p>';
   $('itemnote').innerHTML = selected ? `<b>${esc(room.items[selected].name)}:</b> ${esc(room.items[selected].desc)} Now tap something in the room to use it, or tap the item again to put it away.` : (ids.length ? 'Tap an item to read it or use it on something.' : '');
   $('stage').classList.toggle('using', !!selected);
@@ -721,7 +741,7 @@ function hintPicker() {
   const f = team(m.team).flags;
   openModal({ title: 'Hint', msg: 'Which trail is your group stuck on? Hints are shared, so everyone sees them in the feed.' });
   $('mtable').innerHTML = '<div class="hintpick">' + room.trails.map(tr => {
-    const d = tr.steps.filter(s => f[s]).length; const all = d === tr.steps.length;
+    const d = tr.steps.filter(s => f[s]).length; const all = !!f[tr.steps[tr.steps.length - 1]];
     return `<button class="btn ghost" data-trail="${tr.id}" ${all ? 'disabled' : ''} style="--c:${tr.color}"><span>${esc(tr.name)}</span><small>${all ? 'done' : d + '/' + tr.steps.length}</small></button>`;
   }).join('') + '<button class="btn ghost" data-trail="exit"><span>The exit door</span><small>all 4 notes</small></button></div>';
 }
@@ -1015,7 +1035,7 @@ Object.assign(ICONS, {
 const MSYM = { // the four symbols, drawn centred on 0,0
   raven: '<path d="M-12 6q2-12 14-12l5-5 2 5 6 1-6 3q-2 10-14 10z" fill="currentColor"/><circle cx="4" cy="-4" r="1.4" fill="#000"/>',
   candle: '<rect x="-4" y="-2" width="8" height="14" fill="currentColor"/><path d="M0-12q5 6 0 9q-5-3 0-9z" fill="#ffcc66"/>',
-  moon: '<path d="M3-11a11 11 0 1 0 0 22a8 8 0 1 1 0-22z" fill="currentColor"/>',
+  moon: '<path d="M2-12A12 12 0 1 0 2 12A7 12 0 0 1 2-12Z" fill="currentColor"/>',
   hourglass: '<path d="M-8-12h16M-8 12h16M-6-12q0 9 6 12q-6 3-6 12M6-12q0 9-6 12q6 3 6 12" stroke="currentColor" stroke-width="2.5" fill="none"/><path d="M-3 8l3-4 3 4z" fill="currentColor"/>',
   key: '<circle cx="-6" cy="0" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M-1 0h13M8 0v5M12 0v4" stroke="currentColor" stroke-width="3" fill="none"/>',
 };
@@ -1160,6 +1180,7 @@ SCENES.mansion = [
 ];
 
 SCENES.mansion_hard = SCENES.mansion;   // the same walls; each wall draws its Hard extras from the room
+if (window.initThemeArt) window.initThemeArt({ SCENES, ICONS, PZ, hot });   // themes-art.js: museum, ship, pirate, temple
 
 Object.assign(ICONS, {
   crowbar: '<svg viewBox="0 0 40 40"><path d="M10 32L28 10q4-4 6 0" stroke="#7a8088" stroke-width="4" fill="none"/></svg>',

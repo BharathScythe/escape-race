@@ -4,12 +4,14 @@ A multiplayer escape room, hosted free on GitHub Pages.
 
 **The host chooses the game** from the **Game** menu on the host page, before clicking Start game:
 
-| Game | Trails | Exit | Hints |
-|---|---|---|---|
-| The Haunted Mansion · Normal | 4 | 4-letter name | 6 |
-| The Haunted Mansion · Hard | 5 | 5-letter name | 4 |
-| The Locked Building · Normal | 4 | 4-digit code | 6 |
-| The Locked Building · Hard | 5 | 5-digit code | 4 |
+| Game | Normal | Hard |
+|---|---|---|
+| The Haunted Mansion | 4 trails · 4-letter name · 6 hints | 5 trails · 5-letter name · 4 hints |
+| The Locked Building | 4 trails · 4-digit code · 6 hints | 5 trails · 5-digit code · 4 hints |
+| The Museum | 4 trails · 4-digit code · 6 hints | 5 trails · 5-digit code · 4 hints |
+| The Spaceship | 4 trails · 4-letter launch code · 6 hints | 5 trails · 5 letters · 4 hints |
+| The Pirate Ship | 4 trails · 4-letter hatch word · 6 hints | 5 trails · 5 letters · 4 hints |
+| The Temple | 4 trails · 4 numbers in dots and bars · 6 hints | 5 trails · 5 numbers · 4 hints |
 
 Everyone plays together, up to about 20 players. Switching games clears the old game's progress but
 keeps the players. `COOP_ROOM` in `config.js` sets what shows before the host picks.
@@ -48,7 +50,8 @@ then stays inside that one browser.
 In both modes, everything a player finds appears in everyone's bag on their team, and anyone who
 clicks the same spot sees "Already found by Priya". Finds, wrong codes and hints show up in the feed.
 
-Files: `index.html` (the game), `puzzles.js` (room logic, clues and hints), `config.js` (your settings).
+Files: `index.html` (the game), `puzzles.js` (Mansion and Building puzzles), `themes.js` (Museum, Spaceship,
+Pirate Ship and Temple puzzles), `themes-art.js` (their room drawings), `config.js` (your settings).
 `serve.js` is only for testing on your own computer.
 
 ## 1. Set up Firebase (free, about 5 minutes)
@@ -108,6 +111,61 @@ node serve.js
 Open http://localhost:8080/?host=change-me in one tab and http://localhost:8080 in another.
 
 ## Spoilers: the solutions
+
+<details><summary>The Museum (Normal 4334 · Hard 43345)</summary>
+
+- **Pharaoh trail:** hieroglyph key (eye 1, bird 2, ankh 3, sun 4, snake 5) + jar lids (sun, bird, snake, eye)
+  → sarcophagus **4251** (Hard: right to left, **1524**) → Note A: 4 canopic jars → **4**.
+- **Art trail:** magnifying glass on the guard's chair → use it on the paintings (1888, 1907, 1931) →
+  plinth **871** (Hard: newest first, **178**) → Note B: 3 paintings → **3**.
+- **Dinosaur trail:** brush in the lobby lost-and-found → dig pit → T-rex panel, teeth 6 + 5 = **11**
+  (Hard: 6 × 5 = **30**) → Note C: 3 toes → **3**.
+- **Security trail:** CCTV camera 3 → archive box 1987 → keycard → key cabinet (Hard: then PIN **2147**,
+  the camera's timestamp) → Note D: 4 monitors → **4**.
+- **Hard only, Gem trail:** visitor book → scarab key in the third canopic jar → diamond case → Note E:
+  5 glyphs in the key → **5**.
+</details>
+
+<details><summary>The Spaceship (Normal SAFE · Hard SAFER)</summary>
+
+- **Power trail:** wrench from the tool wall → coolant valves (gauges RED 3, BLUE 1, GREEN 4) → reactor
+  **341** (red, green, blue; Hard: green, blue, red, **413**) → Tag A: first letter of SOLACE → **S**.
+- **Navigation trail:** star chart + captain's log → nav screen **482**, Vega, the brightest (Hard: second
+  brightest, Deneb, **375**) → Tag B: the chair badge → **A**.
+- **Crew trail:** crew photo → locker **PARK**, the engineer (Hard: the pilot, **SATO**) → med bay keycard →
+  medicine cabinet → Tag C: the FERN planter → **F**.
+- **Oxygen trail:** valve wheel in the spacesuit locker → greenhouse tank → plants → Tag D: last letter of
+  SOLACE → **E**.
+- **Hard only, Comms trail:** antenna in a bunk drawer → bridge radio → distress relay **612**, the reactor
+  temperature → Tag E: RESTORA on the med bay scanner → **R**.
+</details>
+
+<details><summary>The Pirate Ship (Normal FREE · Hard FREED)</summary>
+
+- **Treasure trail:** parrot (eight, cannonballs, masts) + 6 cannonballs + 3 masts on the map → chest **863**
+  (Hard: top two rows only, 3 cannonballs, **833**) → **F**.
+- **Galley trail:** flint on the galley shelf → light the stove → the stew → **R**.
+- **Cargo trail:** boat hook from the brig skeleton → hook down the top crate → lens → telescope: the
+  lighthouse flashes 3, 1, 4 → globe **314** (Hard: backwards, **413**) → **E**.
+- **Cannon trail:** rope on the lower deck → fuse on the cannon → light it with the flint → the brig cell →
+  **E**.
+- **Hard only, Mutiny trail:** captain's logbook → 7 rum bottles + 1 skull in the brig → ring the bell **8**
+  times → **D**.
+</details>
+
+<details><summary>The Temple (Normal 7396 · Hard 73968)</summary>
+
+The tablets show numbers in dots and bars: a dot is one, a bar is five.
+- **Idol trail:** sandbag in the corridor → swap it for the idol → jaguar statue → Tablet A: bar + 2 dots = **7**.
+- **Star trail:** torch from the wall → light the ceiling (jaguar 3, eagle 1, serpent 4) → sundial **314**
+  (Hard: serpent, eagle, jaguar, **413**) → Tablet B: 3 dots = **3**.
+- **Trap trail:** carvings ("walk where the SUN shines") → plates **245** (Hard: the MOON plates, **136**) →
+  the spike pit → Tablet C: bar + 4 dots = **9**.
+- **Crypt trail:** obsidian knife under a mosaic tile → cut the vines → sarcophagus arrows UP UP DOWN →
+  levers **UUD** (Hard: from the water up, **DUU**) → drained sarcophagus → Tablet D: bar + 1 dot = **6**.
+- **Hard only, Waterfall trail:** vine rope in the idol chamber → fish the medallion from the crypt pool →
+  altar in the star chamber → Tablet E: bar + 3 dots = **8**.
+</details>
 
 <details><summary>Hard: The Haunted Mansion (exit password EDITH)</summary>
 
